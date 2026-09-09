@@ -3,16 +3,26 @@ const config = require('../config/config');
 const path = require('path');
 const fs = require('fs');
 
+// Standard Hardhat Account #0 default private key for local development
+const DEFAULT_HARDHAT_ADMIN_KEY = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
+
 class BlockchainService {
   constructor() {
     this.provider = null;
+    this.signer = null;
     this.contract = null;
+    this.contractWithSigner = null;
     this.contractAddress = config.blockchain.contractAddress;
     this.initialized = false;
+    this.contractAbi = null;
+  }
+
+  get isConnected() {
+    return !!(this.provider && this.contract);
   }
 
   /**
-   * Initialize blockchain provider and contract
+   * Initialize blockchain provider, signer, and contract
    */
   async initialize() {
     try {
@@ -20,19 +30,31 @@ class BlockchainService {
       this.provider = new ethers.JsonRpcProvider(config.blockchain.rpcUrl);
 
       // Load contract ABI
-      let contractAbi = null;
       const artifactPath = path.resolve(__dirname, '../../../blockchain/artifacts/contracts/Voting.sol/Voting.json');
 
       if (fs.existsSync(artifactPath)) {
         const artifact = JSON.parse(fs.readFileSync(artifactPath, 'utf8'));
-        contractAbi = artifact.abi;
+        this.contractAbi = artifact.abi;
       } else {
         console.warn('⚠️  Voting contract artifact not found. Please compile the contract.');
       }
 
-      // Connect contract if address is provided
-      if (this.contractAddress && contractAbi) {
-        this.contract = new ethers.Contract(this.contractAddress, contractAbi, this.provider);
+      // Initialize admin signer if private key is available
+      const adminPrivateKey = process.env.ADMIN_PRIVATE_KEY || DEFAULT_HARDHAT_ADMIN_KEY;
+      if (adminPrivateKey && this.provider) {
+        try {
+          this.signer = new ethers.Wallet(adminPrivateKey, this.provider);
+        } catch (signerErr) {
+          console.warn('⚠️  Could not create admin signer:', signerErr.message);
+        }
+      }
+
+      // Connect read-only contract if address is provided
+      if (this.contractAddress && this.contractAbi) {
+        this.contract = new ethers.Contract(this.contractAddress, this.contractAbi, this.provider);
+        if (this.signer) {
+          this.contractWithSigner = this.contract.connect(this.signer);
+        }
         this.initialized = true;
         console.log(`✓ Connected to Voting contract at: ${this.contractAddress}`);
       } else {
@@ -49,6 +71,48 @@ class BlockchainService {
   async setContractAddress(address) {
     this.contractAddress = address;
     await this.initialize();
+  }
+
+  /**
+   * Authorize a voter address on-chain using the contract admin signer
+   */
+  async authorizeVoter(voterAddress) {
+    if (!this.contractWithSigner) {
+      await this.initialize();
+    }
+    if (!this.contractWithSigner) {
+      throw new Error('Blockchain admin signer or contract is not connected');
+    }
+
+    const tx = await this.contractWithSigner.authorizeVoter(voterAddress);
+    const receipt = await tx.wait();
+    return {
+      txHash: tx.hash,
+      blockNumber: receipt.blockNumber,
+      gasUsed: receipt.gasUsed.toString(),
+      status: receipt.status === 1 ? 'CONFIRMED' : 'FAILED',
+    };
+  }
+
+  /**
+   * Authorize multiple voters in batch on-chain
+   */
+  async authorizeVotersInBatch(voterAddresses) {
+    if (!this.contractWithSigner) {
+      await this.initialize();
+    }
+    if (!this.contractWithSigner) {
+      throw new Error('Blockchain admin signer or contract is not connected');
+    }
+
+    const tx = await this.contractWithSigner.authorizeVotersInBatch(voterAddresses);
+    const receipt = await tx.wait();
+    return {
+      txHash: tx.hash,
+      blockNumber: receipt.blockNumber,
+      gasUsed: receipt.gasUsed.toString(),
+      status: receipt.status === 1 ? 'CONFIRMED' : 'FAILED',
+    };
   }
 
   /**
@@ -69,12 +133,14 @@ class BlockchainService {
           const admin = await this.contract.admin();
           const candidateCount = await this.contract.candidateCount();
           const totalVotes = await this.contract.totalVotesCast();
+          const electionStatus = await this.contract.status();
           contractStatus = {
             deployed: true,
             address: this.contractAddress,
             admin,
             candidateCount: Number(candidateCount),
             totalVotes: Number(totalVotes),
+            status: electionStatus === 0 ? 'NOT_STARTED' : (electionStatus === 1 ? 'ACTIVE' : 'ENDED'),
           };
         } catch (e) {
           contractStatus = {
@@ -105,6 +171,9 @@ class BlockchainService {
    */
   async getResults() {
     if (!this.contract) {
+      await this.initialize();
+    }
+    if (!this.contract) {
       throw new Error('Contract not connected');
     }
 
@@ -130,6 +199,9 @@ class BlockchainService {
    */
   async checkHasVoted(voterAddress) {
     if (!this.contract) {
+      await this.initialize();
+    }
+    if (!this.contract) {
       throw new Error('Contract not connected');
     }
 
@@ -140,6 +212,9 @@ class BlockchainService {
    * Check if a voter is authorized on the blockchain
    */
   async checkIsAuthorized(voterAddress) {
+    if (!this.contract) {
+      await this.initialize();
+    }
     if (!this.contract) {
       throw new Error('Contract not connected');
     }
@@ -170,7 +245,7 @@ class BlockchainService {
       to: tx.to,
       status: receipt ? (receipt.status === 1 ? 'CONFIRMED' : 'FAILED') : 'PENDING',
       gasUsed: receipt ? receipt.gasUsed.toString() : null,
-      confirmations: await tx.confirmations(),
+      confirmations: tx.blockNumber ? (await this.provider.getBlockNumber()) - tx.blockNumber + 1 : 0,
     };
   }
 }

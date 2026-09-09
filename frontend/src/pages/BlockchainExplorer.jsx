@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { blockchainAPI } from '../services/api';
-import { Shield, CheckCircle, Clock, Search, AlertCircle } from 'lucide-react';
+import { CheckCircle, Search, AlertCircle } from 'lucide-react';
 
 const BlockchainExplorer = () => {
   const [status, setStatus] = useState(null);

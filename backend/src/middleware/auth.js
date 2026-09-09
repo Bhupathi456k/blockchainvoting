@@ -86,6 +86,96 @@ const authorize = (...roles) => {
 };
 
 /**
+ * Require approved election host permission
+ * Checks if user has APPROVED hostPermissionStatus
+ */
+const requireApprovedElectionHost = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({
+      success: false,
+      error: 'User not authenticated',
+    });
+  }
+
+  if (req.user.role !== 'VOTER' && req.user.role !== 'ADMIN') {
+    return res.status(403).json({
+      success: false,
+      error: 'Invalid user role',
+    });
+  }
+
+  // Admins can always create elections
+  if (req.user.role === 'ADMIN') {
+    return next();
+  }
+
+  // For voters, check host permission
+  if (req.user.hostPermissionStatus !== 'APPROVED') {
+    return res.status(403).json({
+      success: false,
+      error: 'You do not have permission to host an election. Please request permission from an administrator.',
+    });
+  }
+
+  next();
+};
+
+/**
+ * Require election ownership or admin
+ * Checks if user owns the election or is admin
+ */
+const requireElectionOwner = async (req, res, next) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        error: 'User not authenticated',
+      });
+    }
+
+    // Admin can manage all elections
+    if (req.user.role === 'ADMIN') {
+      return next();
+    }
+
+    const { Election } = require('../models');
+    const electionId = req.params.id || req.params.electionId;
+
+    if (!electionId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Election ID required',
+      });
+    }
+
+    const election = await Election.findByPk(electionId);
+
+    if (!election) {
+      return res.status(404).json({
+        success: false,
+        error: 'Election not found',
+      });
+    }
+
+    // Check ownership
+    if (election.hostUserId !== req.user.id) {
+      return res.status(403).json({
+        success: false,
+        error: 'You do not have permission to modify this election',
+      });
+    }
+
+    next();
+  } catch (error) {
+    console.error('Election ownership check error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Authorization check failed',
+    });
+  }
+};
+
+/**
  * Optional authentication middleware
  * Attaches user if token is present, but doesn't require it
  */
@@ -122,4 +212,6 @@ module.exports = {
   authenticate,
   authorize,
   optionalAuth,
+  requireApprovedElectionHost,
+  requireElectionOwner,
 };

@@ -1,5 +1,6 @@
 const blockchainService = require('../services/blockchainService');
 const { BlockchainTransaction, Election, User } = require('../models');
+const AuditService = require('../services/auditService');
 
 /**
  * Get blockchain connection status
@@ -179,6 +180,13 @@ const recordVoteTransaction = async (req, res, next) => {
     // Update user voting status
     user.hasVoted = true;
     await user.save();
+
+    AuditService.logBlockchain('VOTE_RECORDED', transactionHash, user, req, {
+      electionId,
+      candidateId,
+      blockNumber: txInfo.blockNumber,
+      gasUsed: txInfo.gasUsed,
+    });
 
     res.status(201).json({
       success: true,

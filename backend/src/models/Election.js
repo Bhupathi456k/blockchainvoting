@@ -7,6 +7,14 @@ const Election = sequelize.define('Election', {
     primaryKey: true,
     autoIncrement: true,
   },
+  hostUserId: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    references: {
+      model: 'users',
+      key: 'id',
+    },
+  },
   title: {
     type: DataTypes.STRING(255),
     allowNull: false,

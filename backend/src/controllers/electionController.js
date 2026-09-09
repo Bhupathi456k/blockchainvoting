@@ -1,8 +1,9 @@
 const { Election, Candidate, BlockchainTransaction, User } = require('../models');
 const blockchainService = require('../services/blockchainService');
+const AuditService = require('../services/auditService');
 
 /**
- * Create a new election (Admin only)
+ * Create a new election (Approved Host or Admin)
  */
 const createElection = async (req, res, next) => {
   try {
@@ -24,7 +25,10 @@ const createElection = async (req, res, next) => {
       startTime: start,
       endTime: end,
       status: 'DRAFT',
+      hostUserId: req.user.id, // Track who created this election
     });
+
+    AuditService.logElection('ELECTION_CREATED', election, req.user, req);
 
     res.status(201).json({
       success: true,
@@ -132,7 +136,7 @@ const getActiveElection = async (req, res, next) => {
 };
 
 /**
- * Update election details (Admin only, only if not started)
+ * Update election details (Owner or Admin, only if not started)
  */
 const updateElection = async (req, res, next) => {
   try {
@@ -146,6 +150,8 @@ const updateElection = async (req, res, next) => {
         error: 'Election not found',
       });
     }
+
+    // Ownership check already handled by requireElectionOwner middleware
 
     if (election.status !== 'DRAFT') {
       return res.status(400).json({
@@ -170,6 +176,8 @@ const updateElection = async (req, res, next) => {
       endTime: endTime || election.endTime,
     });
 
+    AuditService.logElection('ELECTION_UPDATED', election, req.user, req);
+
     res.status(200).json({
       success: true,
       message: 'Election updated successfully',
@@ -181,7 +189,7 @@ const updateElection = async (req, res, next) => {
 };
 
 /**
- * Start election (Admin only)
+ * Start election (Owner or Admin)
  */
 const startElection = async (req, res, next) => {
   try {
@@ -196,6 +204,8 @@ const startElection = async (req, res, next) => {
         error: 'Election not found',
       });
     }
+
+    // Ownership check already handled by requireElectionOwner middleware
 
     if (election.status === 'ACTIVE') {
       return res.status(400).json({
@@ -221,6 +231,8 @@ const startElection = async (req, res, next) => {
     election.status = 'ACTIVE';
     await election.save();
 
+    AuditService.logElection('ELECTION_STARTED', election, req.user, req);
+
     res.status(200).json({
       success: true,
       message: 'Election started successfully',
@@ -232,7 +244,7 @@ const startElection = async (req, res, next) => {
 };
 
 /**
- * End election (Admin only)
+ * End election (Owner or Admin)
  */
 const endElection = async (req, res, next) => {
   try {
@@ -246,6 +258,8 @@ const endElection = async (req, res, next) => {
       });
     }
 
+    // Ownership check already handled by requireElectionOwner middleware
+
     if (election.status !== 'ACTIVE') {
       return res.status(400).json({
         success: false,
@@ -256,10 +270,47 @@ const endElection = async (req, res, next) => {
     election.status = 'ENDED';
     await election.save();
 
+    AuditService.logElection('ELECTION_ENDED', election, req.user, req);
+
     res.status(200).json({
       success: true,
       message: 'Election ended successfully',
       data: election,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Delete election (Owner or Admin, only before active/with caution)
+ */
+const deleteElection = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const election = await Election.findByPk(id);
+
+    if (!election) {
+      return res.status(404).json({
+        success: false,
+        error: 'Election not found',
+      });
+    }
+
+    if (election.status === 'ACTIVE') {
+      return res.status(400).json({
+        success: false,
+        error: 'Cannot delete an active election. End it first.',
+      });
+    }
+
+    AuditService.logElection('ELECTION_DELETED', election, req.user, req);
+
+    await election.destroy();
+
+    res.status(200).json({
+      success: true,
+      message: 'Election deleted successfully',
     });
   } catch (error) {
     next(error);
@@ -368,5 +419,6 @@ module.exports = {
   updateElection,
   startElection,
   endElection,
+  deleteElection,
   getElectionResults,
 };

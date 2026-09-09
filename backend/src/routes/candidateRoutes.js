@@ -1,20 +1,20 @@
 const express = require('express');
 const { body } = require('express-validator');
 const candidateController = require('../controllers/candidateController');
-const { authenticate, authorize } = require('../middleware/auth');
+const { authenticate, authorize, requireElectionOwner } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 
 const router = express.Router();
 
 /**
- * @route   POST /api/elections/:electionId/candidates
+ * @route   POST /api/candidates/:electionId
  * @desc    Create candidate for an election
- * @access  Private (Admin)
+ * @access  Private (Election Owner or Admin)
  */
 router.post(
   '/:electionId',
   authenticate,
-  authorize('ADMIN'),
+  requireElectionOwner,
   [
     body('name')
       .trim()
@@ -56,12 +56,11 @@ router.get('/:id', authenticate, candidateController.getCandidateById);
 /**
  * @route   PATCH /api/candidates/:id
  * @desc    Update candidate
- * @access  Private (Admin)
+ * @access  Private (Election Owner or Admin)
  */
 router.patch(
   '/:id',
   authenticate,
-  authorize('ADMIN'),
   [
     body('name')
       .optional()
@@ -86,8 +85,8 @@ router.patch(
 /**
  * @route   DELETE /api/candidates/:id
  * @desc    Delete candidate
- * @access  Private (Admin)
+ * @access  Private (Election Owner or Admin)
  */
-router.delete('/:id', authenticate, authorize('ADMIN'), candidateController.deleteCandidate);
+router.delete('/:id', authenticate, candidateController.deleteCandidate);
 
 module.exports = router;

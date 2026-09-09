@@ -2,77 +2,166 @@
 
 ## Overview
 
-The Secure Digital Voting Platform is built using a multi-layered architecture designed to separate concerns while ensuring data integrity, tamper-proof vote recording, and high security.
+The Secure Digital Voting Platform is built using a multi-layered, decentralized-aware architecture designed to separate concerns while ensuring data integrity, tamper-proof vote recording, granular authorization, and transparent governance.
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                 USER INTERFACE LAYER                    │
-│            React.js Single Page Application             │
-│   (Voter Dashboard, Admin Panel, Results, Web3.js)      │
-└───────────────────────────┬─────────────────────────────┘
-                            │
-                            │ HTTPS / REST API / JSON-RPC
-                            ▼
-┌─────────────────────────────────────────────────────────┐
-│               APPLICATION / BACKEND LAYER               │
-│                  Node.js + Express.js                   │
-│  (Auth, Validation, Election Lifecycle, Auditing)       │
-└─────────────┬─────────────────────────────┬─────────────┘
-              │                             │
-    SQL / ORM │                   Ethers.js │ JSON-RPC
-              ▼                             ▼
-┌───────────────────────────┐ ┌───────────────────────────┐
-│      DATABASE LAYER       │ │     BLOCKCHAIN LAYER      │
-│     SQLite / PostgreSQL   │ │    Ethereum Local Node    │
-│  (Off-Chain Metadata)     │ │   (Tamper-Proof Storage)  │
-└───────────────────────────┘ └─────────────┬─────────────┘
-                                            │
-                                            ▼
-                              ┌───────────────────────────┐
-                              │   SMART CONTRACT LAYER    │
-                              │       Voting.sol          │
-                              │ (Duplicate Prevention,    │
-                              │  Vote Counting, Results)  │
-                              └───────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│                          USER INTERFACE LAYER                            │
+│                     React.js Single Page Application                     │
+│  ┌─────────────────────────────────┐  ┌───────────────────────────────┐  │
+│  │     Unified Voter/Host Portal   │  │       Admin Control Hub       │  │
+│  │   - Dynamic Hosting State Hub   │  │   - Host Request Reviewer     │  │
+│  │   - Election Creation Wizard    │  │   - System Metrics & Users    │  │
+│  │   - Active Voting & MetaMask    │  │   - Election Overseer         │  │
+│  └─────────────────────────────────┘  └───────────────────────────────┘  │
+└────────────────────────────────────┬─────────────────────────────────────┘
+                                     │
+                                     │ HTTPS / REST API / JSON-RPC
+                                     ▼
+┌──────────────────────────────────────────────────────────────────────────┐
+│                       APPLICATION / BACKEND LAYER                        │
+│                           Node.js + Express.js                           │
+│  ┌────────────────────────────────────────────────────────────────────┐  │
+│  │ Middleware: JWT Auth, requireApprovedElectionHost, requireOwner    │  │
+│  ├────────────────────────────────────────────────────────────────────┤  │
+│  │ Modules: Host Requests, Elections, Candidates, Blockchain, Voters  │  │
+│  └────────────────────────────────────────────────────────────────────┘  │
+└─────────────┬──────────────────────────────────────────────┬─────────────┘
+              │                                              │
+    SQL / ORM │                                    Ethers.js │ JSON-RPC
+              ▼                                              ▼
+┌───────────────────────────┐                  ┌───────────────────────────┐
+│      DATABASE LAYER       │                  │     BLOCKCHAIN LAYER      │
+│     SQLite / PostgreSQL   │                  │    Ethereum Local Node    │
+│  (Off-Chain Metadata,     │                  │   (Tamper-Proof Storage)  │
+│   Host Requests, Users,   │                  └─────────────┬─────────────┘
+│   Election Ownership)     │                                │
+└───────────────────────────┘                                ▼
+                                               ┌───────────────────────────┐
+                                               │   SMART CONTRACT LAYER    │
+                                               │       Voting.sol          │
+                                               │ (Duplicate Prevention,    │
+                                               │  Vote Counting, Results)  │
+                                               └───────────────────────────┘
 ```
 
 ## Architectural Separation of Concerns
 
 ### 1. Off-Chain Layer (Database)
-Stores non-sensitive and administrative data:
-- User authentication credentials (passwords hashed with bcrypt)
-- Voter profiles (name, email, phone, voter ID)
-- Election configuration metadata (titles, descriptions, scheduled times)
-- Candidate profiles (names, party affiliations, descriptions)
-- Audit logs and transaction references
+Stores user profiles, governance requests, and administrative metadata:
+- **User Accounts & Roles**: Unified login credentials (passwords hashed with `bcrypt`), roles (`VOTER`, `ADMIN`), and dynamic host permission status (`NONE`, `PENDING`, `APPROVED`, `REJECTED`).
+- **Election Host Requests**: Formal hosting applications tracking requester ID, election title, description, purpose, expected voter count, proposed schedule, election type, status, reviewing administrator ID, review timestamp, and rejection reasons.
+- **Election Metadata & Ownership**: Election titles, descriptions, status (`UPCOMING`, `ACTIVE`, `ENDED`), timestamps, and `hostUserId` identifying the approved owner.
+- **Candidate Profiles**: Names, party affiliations, bios, and election references.
+- **Audit Logs & Transactions**: Cross-reference records linking off-chain user votes with on-chain transaction hashes.
 
 ### 2. On-Chain Layer (Ethereum Smart Contract)
 Authoritative source of truth for all voting data:
-- Authoritative duplicate vote prevention (`mapping(address => bool) hasVoted`)
-- Cryptographic voter authorization (`mapping(address => bool) authorizedVoters`)
-- Real-time vote counts for candidates
-- Immutable vote audit trail (via emitted blockchain events)
-- Election start/end enforcement
+- **Authoritative Duplicate Vote Prevention**: `mapping(address => bool) hasVoted` guarantees that each wallet address can vote exactly once per election.
+- **Cryptographic Voter Authorization**: `mapping(address => bool) authorizedVoters` verifies voter eligibility.
+- **Real-time Vote Tallies**: Candidate vote counts incremented atomically on-chain.
+- **Immutable Vote Audit Trail**: Emitted `VoteCast` blockchain events provide cryptographic non-repudiation.
+- **Election State Enforcement**: Smart contract enforces that votes can only be cast when the election is active.
 
-## Key Security Flows
+---
 
-### 1. Voter Registration Flow
-1. Voter submits registration form with name, email, Voter ID, and password.
-2. Backend validates input fields and ensures uniqueness of Voter ID and email.
-3. Password is cryptographically hashed using `bcrypt` (10 salt rounds).
-4. Voter record is stored in database.
+## Role & Permission Model
 
-### 2. Secure Vote Casting Flow
-1. Voter logs in and connects MetaMask wallet.
-2. Frontend verifies that the active wallet is authorized to vote.
-3. Voter selects a candidate and confirms vote.
-4. MetaMask requests transaction signing and submission to the `Voting` smart contract.
-5. Smart contract validates:
+The platform uses a role and permission model where standard voter accounts do not possess election hosting privileges by default. Users acquire hosting privileges through an administrative request and approval workflow:
+
+| Role / Status | View Elections | Cast Vote | Submit Host Request | Create Election | Manage Owned Elections | Manage Any Election | Review Host Requests |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Voter (`NONE`)** | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
+| **Voter (`PENDING`)** | ✅ | ✅ | ❌ *(In review)* | ❌ | ❌ | ❌ | ❌ |
+| **Voter (`APPROVED`)** | ✅ | ✅ | ❌ *(Already approved)* | ✅ | ✅ | ❌ | ❌ |
+| **Voter (`REJECTED`)** | ✅ | ✅ | ✅ *(Can re-apply)* | ❌ | ❌ | ❌ | ❌ |
+| **Administrator** | ✅ | ✅ | N/A | ✅ | ✅ | ✅ | ✅ |
+
+---
+
+## Security & Authorization Middleware Architecture
+
+All backend routes enforce server-side security boundaries:
+
+```
+                  ┌───────────────────────────────┐
+                  │       Incoming Request        │
+                  └───────────────┬───────────────┘
+                                  │
+                                  ▼
+                  ┌───────────────────────────────┐
+                  │      authenticate (JWT)       │
+                  └───────────────┬───────────────┘
+                                  │
+                ┌─────────────────┴─────────────────┐
+                ▼                                   ▼
+  ┌───────────────────────────┐       ┌───────────────────────────┐
+  │requireApprovedElectionHost│       │   requireElectionOwner    │
+  │- Allows ADMIN             │       │- Allows ADMIN             │
+  │- Checks hostPermission    │       │- Checks req.user.id ===   │
+  │  === 'APPROVED'           │       │  election.hostUserId      │
+  │- Returns 403 if invalid   │       │- Returns 403 if mismatch  │
+  └───────────────────────────┘       └───────────────────────────┘
+```
+
+1. **`authenticate`**: Verifies the JWT Bearer token in the `Authorization` header, extracts the user profile, and attaches `req.user`. Returns `401 Unauthorized` if invalid or missing.
+2. **`requireApprovedElectionHost`**: Applied to `POST /api/elections`. Ensures only users with `hostPermissionStatus === 'APPROVED'` (or `role === 'ADMIN'`) can create new elections. Returns `403 Forbidden` otherwise.
+3. **`requireElectionOwner`**: Applied to election modification, candidate management, and election start/stop endpoints (`PATCH /api/elections/:id`, `POST /api/elections/:id/start`, `POST /api/elections/:id/end`, `POST /api/candidates/:electionId`). Verifies that the authenticated user is either the original election creator (`hostUserId === req.user.id`) or a system Administrator. Returns `403 Forbidden` if an unauthorized user attempts modification.
+4. **`authorize('ADMIN')`**: Restricts sensitive administrative routes (such as host request approval/rejection and system audits) to administrators only.
+
+---
+
+## Key Workflows
+
+### 1. Election Host Application & Approval Lifecycle
+
+```
+[ Voter ]                                       [ Admin ]
+   │                                                │
+   │ 1. Navigates to /dashboard                     │
+   │ 2. Clicks "Request Hosting Permission"         │
+   │ 3. Submits details at /host-request            │
+   │    (Title, purpose, voter count, schedule)     │
+   ▼                                                │
+[ Backend: Status = PENDING, User = PENDING ]       │
+   │                                                │
+   │                                                │ 4. Receives request in /admin
+   │                                                │ 5. Reviews proposal details
+   │                                                │
+   │                                                ├─► [ Option A: APPROVE ]
+   │                                                │   - Request status -> APPROVED
+   │                                                │   - User hostPermission -> APPROVED
+   │                                                │
+   │                                                └─► [ Option B: REJECT ]
+   │                                                    - Collects rejection reason
+   │                                                    - Request status -> REJECTED
+   │                                                    - User hostPermission -> REJECTED
+   │                                                                │
+   ▼                                                                ▼
+[ User Dashboard Updates ]                             [ Notification & Audit Trail ]
+- If APPROVED: "Create & Host Election" unlocked       - Full audit log saved
+- If REJECTED: Shows admin reason + reapply button     - ReviewedBy admin ID recorded
+```
+
+### 2. Election Creation & Candidate Management Flow
+
+1. Approved host clicks **"Create & Host Election"** on their dashboard (`/elections/create`).
+2. Host enters election parameters (title, description, start time, end time).
+3. Backend validates input and assigns `hostUserId = req.user.id`.
+4. Host adds candidates to their created election (`/api/candidates/:electionId`).
+5. Host starts the election when ready (`/api/elections/:id/start`).
+
+### 3. Secure Blockchain Vote Casting Flow
+
+1. Registered voter logs into the Unified Portal and accesses an active election.
+2. Voter connects their MetaMask Web3 wallet.
+3. Voter selects their chosen candidate and initiates vote submission.
+4. MetaMask requests transaction signature against the `Voting` smart contract.
+5. Smart contract executes verification checks:
    - Is election active?
    - Is voter authorized?
-   - Has voter already voted? (`require(!hasVoted[msg.sender])`)
-   - Is candidate valid?
-6. Smart contract increments candidate's vote count and marks voter as voted.
-7. Blockchain emits `VoteCast` event and generates a transaction hash.
-8. Frontend captures transaction hash and syncs record with backend.
-9. Voter is prevented from voting again on all layers.
+   - Has the voter already voted? (`require(!hasVoted[msg.sender])`)
+   - Is candidate ID valid?
+6. Smart contract increments candidate tally and marks voter address as used.
+7. `VoteCast` event is emitted on the blockchain with the transaction receipt.
+8. Backend records transaction hash and voter participation off-chain.

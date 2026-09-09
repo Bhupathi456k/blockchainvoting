@@ -1,442 +1,194 @@
 # Secure Digital Voting Platform Using Blockchain Technology
 
-A complete blockchain-based electronic voting system with smart contracts, secure authentication, and real-time vote counting.
+A complete blockchain-based digital voting and election management system featuring Ethereum smart contracts, granular election-host authorization workflows, cryptographic vote verification, and real-time tallying.
 
 ## 🎯 Project Overview
 
-This is an academic engineering project implementing a secure, transparent, and tamper-proof digital voting platform using Ethereum blockchain technology and Solidity smart contracts.
+This platform implements a secure, transparent, and tamper-proof digital voting ecosystem. The system features a **Unified Portal Model** where all participants register and log in through a single user dashboard. Standard voters can participate in active elections and apply to host their own elections via an administrative review and approval workflow.
 
 ### Key Features
 
-✅ **Voter Registration & Authentication** - Secure voter registration with JWT-based authentication  
-✅ **Blockchain Vote Storage** - All votes stored on Ethereum blockchain via smart contracts  
-✅ **Duplicate Vote Prevention** - Smart contract-level duplicate voting prevention  
-✅ **MetaMask Integration** - Wallet-based transaction signing  
-✅ **Admin Dashboard** - Complete election and candidate management  
-✅ **Real-time Results** - Vote counting directly from blockchain state  
-✅ **Transaction Verification** - Display blockchain transaction hashes and block details  
-✅ **Responsive UI** - Professional React-based user interface  
+✅ **Unified User Dashboard** - Single entry point for both voting participation and election hosting management  
+✅ **Election Host Authorization Workflow** - Formal hosting application lifecycle (`NONE` → `PENDING` → `APPROVED` / `REJECTED`)  
+✅ **Administrative Governance Panel** - Review, approve, or reject host applications with transparent feedback  
+✅ **Election Ownership & Access Control** - Approved hosts manage their own elections with strict API authorization  
+✅ **Blockchain Vote Storage** - All votes recorded on the Ethereum blockchain via Solidity smart contracts  
+✅ **Cryptographic Duplicate Prevention** - Smart contract-level duplicate voting prevention via address mapping  
+✅ **MetaMask Web3 Integration** - Wallet-based transaction signing and cryptographic confirmation  
+✅ **Real-Time Blockchain Explorer** - Live transaction validation, block inspection, and immutable tallies  
+✅ **Responsive Glassmorphism UI** - Modern React + Tailwind CSS interface with dynamic status indicators  
+
+---
 
 ## 🏗️ Architecture
 
 ```
-                    ┌───────────────────────┐
-                    │   VOTER / ADMIN       │
-                    │  (React Frontend)     │
-                    └───────────┬───────────┘
-                                │
-                                ▼
-                    ┌───────────────────────┐
-                    │   Node.js + Express   │
-                    │   (REST API Backend)  │
-                    └───────┬───────┬───────┘
-                            │       │
-                    Database│       │Blockchain
-                            ▼       ▼
-                    ┌──────────┐ ┌──────────────┐
-                    │ SQLite/  │ │   Ethereum   │
-                    │PostgreSQL│ │  Blockchain  │
-                    └──────────┘ └──────┬───────┘
-                                        │
-                                        ▼
-                               ┌─────────────────┐
-                               │ Solidity Smart  │
-                               │   Contract      │
-                               │ (Voting Logic)  │
-                               └─────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│                          USER INTERFACE LAYER                            │
+│                     React.js Single Page Application                     │
+│  ┌─────────────────────────────────┐  ┌───────────────────────────────┐  │
+│  │     Unified Voter/Host Portal   │  │       Admin Control Hub       │  │
+│  │   - Dynamic Hosting State Hub   │  │   - Host Request Reviewer     │  │
+│  │   - Election Creation Wizard    │  │   - System Metrics & Users    │  │
+│  │   - Active Voting & MetaMask    │  │   - Election Overseer         │  │
+│  └─────────────────────────────────┘  └───────────────────────────────┘  │
+└────────────────────────────────────┬─────────────────────────────────────┘
+                                     │
+                                     │ HTTPS / REST API / JSON-RPC
+                                     ▼
+┌──────────────────────────────────────────────────────────────────────────┐
+│                       APPLICATION / BACKEND LAYER                        │
+│                           Node.js + Express.js                           │
+│  ┌────────────────────────────────────────────────────────────────────┐  │
+│  │ Middleware: JWT Auth, requireApprovedElectionHost, requireOwner    │  │
+│  ├────────────────────────────────────────────────────────────────────┤  │
+│  │ Modules: Host Requests, Elections, Candidates, Blockchain, Voters  │  │
+│  └────────────────────────────────────────────────────────────────────┘  │
+└─────────────┬──────────────────────────────────────────────┬─────────────┘
+              │                                              │
+    SQL / ORM │                                    Ethers.js │ JSON-RPC
+              ▼                                              ▼
+┌───────────────────────────┐                  ┌───────────────────────────┐
+│      DATABASE LAYER       │                  │     BLOCKCHAIN LAYER      │
+│     SQLite / PostgreSQL   │                  │    Ethereum Local Node    │
+│  (Off-Chain Metadata,     │                  │   (Tamper-Proof Storage)  │
+│   Host Requests, Users,   │                  └─────────────┬─────────────┘
+│   Election Ownership)     │                                │
+└───────────────────────────┘                                ▼
+                                               ┌───────────────────────────┐
+                                               │   SMART CONTRACT LAYER    │
+                                               │       Voting.sol          │
+                                               │ (Duplicate Prevention,    │
+                                               │  Vote Counting, Results)  │
+                                               └───────────────────────────┘
 ```
+
+---
 
 ## 🛠️ Technology Stack
 
-### Frontend
-- React.js
-- Web3.js
-- React Router
-- Axios
+- **Frontend**: React 18, Vite, Tailwind CSS, Lucide Icons, Ethers.js / Web3.js
+- **Backend**: Node.js, Express.js, Sequelize ORM, SQLite / PostgreSQL, JWT, bcryptjs, Helmet, Express-Rate-Limit
+- **Blockchain**: Solidity (`^0.8.19`), Hardhat, Local Ethereum Node, MetaMask
+- **Testing**: Jest, Supertest, Hardhat Chai / Mocha
 
-### Backend
-- Node.js
-- Express.js
-- Sequelize ORM
-- JWT Authentication
-- bcrypt
+---
 
-### Database
-- SQLite (development)
-- PostgreSQL (production-ready)
+## 🚀 Quick Start Guide
 
-### Blockchain
-- Ethereum (local development chain)
-- Solidity
-- Hardhat
-- MetaMask
-- Web3.js
-
-## 📋 Prerequisites
-
-Before you begin, ensure you have the following installed:
-
-- **Node.js** (v16 or higher) - [Download](https://nodejs.org/)
-- **npm** (comes with Node.js)
-- **MetaMask** browser extension - [Install](https://metamask.io/)
-- **Git** (optional, for version control)
-
-## 🚀 Installation & Setup
-
-### 1. Clone or Download the Project
-
+### 1. Install Dependencies
 ```bash
-cd blockchain-voting-platform
+# Backend
+cd backend && npm install && cd ..
+
+# Frontend
+cd frontend && npm install && cd ..
+
+# Blockchain
+cd blockchain && npm install && cd ..
 ```
 
-### 2. Install Dependencies
-
-#### Install Backend Dependencies
-```bash
-cd backend
-npm install
-cd ..
-```
-
-#### Install Frontend Dependencies
-```bash
-cd frontend
-npm install
-cd ..
-```
-
-#### Install Blockchain Dependencies
-```bash
-cd blockchain
-npm install
-cd ..
-```
-
-### 3. Environment Configuration
-
-Copy the example environment file and configure it:
-
+### 2. Configure Environment
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` and set your configuration (the defaults work for local development).
-
-### 4. Start the Local Blockchain
-
-Open a new terminal and start Hardhat's local Ethereum node:
-
+### 3. Start Local Blockchain
 ```bash
+# Terminal 1
 cd blockchain
 npx hardhat node
 ```
 
-**Keep this terminal running.** You should see:
-- Started HTTP and WebSocket JSON-RPC server at http://127.0.0.1:8545/
-- 20 accounts with private keys
-- Account #0 will be used for contract deployment
-
-### 5. Deploy the Smart Contract
-
-Open a **new terminal** (keep the blockchain running):
-
+### 4. Deploy Smart Contract
 ```bash
+# Terminal 2
 cd blockchain
 npx hardhat run scripts/deploy.js --network localhost
+# Copy output contract address into .env -> CONTRACT_ADDRESS=0x...
 ```
 
-**Important:** Copy the deployed contract address and update `.env`:
-
-```
-CONTRACT_ADDRESS=0x5FbDB2315678afecb367f032d93F642f64180aa3
-```
-
-### 6. Configure MetaMask
-
-1. Open MetaMask browser extension
-2. Click on the network dropdown (top right)
-3. Select "Add Network" → "Add a network manually"
-4. Enter the following:
-   - **Network Name:** Hardhat Local
-   - **RPC URL:** http://127.0.0.1:8545
-   - **Chain ID:** 31337
-   - **Currency Symbol:** ETH
-5. Click "Save"
-
-6. Import a test account:
-   - Click on your account icon → "Import Account"
-   - Copy a private key from the Hardhat node terminal (Account #1 or later)
-   - Paste it into MetaMask
-   - You should see 10000 ETH (test funds)
-
-### 7. Start the Backend Server
-
-Open a **new terminal**:
-
+### 5. Seed Admin User & Start Backend
 ```bash
+# Terminal 3
 cd backend
+npm run seed:admin
 npm start
 ```
+*Backend runs on `http://localhost:5000`.*
 
-The backend will run on `http://localhost:5000`
-
-### 8. Start the Frontend Application
-
-Open a **new terminal**:
-
+### 6. Start Frontend Application
 ```bash
+# Terminal 4
 cd frontend
-npm start
+npm run dev
 ```
-
-The frontend will open automatically at `http://localhost:3000`
-
-## 🎮 Usage Guide
-
-### Admin Workflow
-
-1. **Login as Admin**
-   - Email: `admin@voting.local`
-   - Password: `Admin@123` (or as configured in .env)
-
-2. **Create an Election**
-   - Navigate to "Elections" → "Create Election"
-   - Enter title, description, start/end dates
-   - Click "Create"
-
-3. **Add Candidates**
-   - Select the election
-   - Click "Add Candidate"
-   - Enter candidate name, party, description
-   - Add 2-5 candidates
-
-4. **Start the Election**
-   - Click "Start Election" when ready
-
-5. **Monitor Voting**
-   - View real-time vote counts
-   - See blockchain transactions
-   - Monitor voter participation
-
-6. **End Election & View Results**
-   - Click "End Election"
-   - View final results with blockchain verification
-
-### Voter Workflow
-
-1. **Register**
-   - Click "Register" on homepage
-   - Enter: Name, Voter ID, Email, Phone, Password
-   - Submit registration
-
-2. **Login**
-   - Enter Email/Voter ID and Password
-   - Click "Login"
-
-3. **Connect Wallet**
-   - Click "Connect Wallet" in the dashboard
-   - MetaMask will open
-   - Select your account
-   - Click "Connect"
-
-4. **Vote**
-   - View active election and candidates
-   - Select ONE candidate
-   - Click "Cast Vote"
-   - Confirm transaction in MetaMask
-   - Wait for blockchain confirmation
-
-5. **Verify Vote**
-   - View transaction hash
-   - Verify on blockchain
-   - See confirmation message
-
-6. **View Results**
-   - After election ends
-   - View vote distribution
-   - See winning candidate
-
-## 🧪 Testing
-
-### Smart Contract Tests
-
-```bash
-cd blockchain
-npm test
-```
-
-Key tests include:
-- Contract deployment
-- Candidate registration
-- Voter authorization
-- Vote casting
-- **Duplicate vote prevention** ✅
-- Result calculation
-
-### Backend Tests
-
-```bash
-cd backend
-npm test
-```
-
-### Run All Tests
-
-```bash
-# From project root
-npm run test:all
-```
-
-## 🔐 Security Features
-
-- ✅ Password hashing with bcrypt
-- ✅ JWT-based authentication
-- ✅ Role-based access control (VOTER/ADMIN)
-- ✅ Input validation
-- ✅ SQL injection protection via Sequelize ORM
-- ✅ CORS configuration
-- ✅ Smart contract access control
-- ✅ Duplicate vote prevention at contract level
-- ✅ Election state validation
-- ✅ Unauthorized voter rejection
-
-## 📊 Project Structure
-
-```
-blockchain-voting-platform/
-├── frontend/               # React frontend
-│   ├── src/
-│   │   ├── components/    # Reusable UI components
-│   │   ├── pages/         # Page components
-│   │   ├── services/      # API and Web3 services
-│   │   ├── context/       # React context for state
-│   │   └── App.js
-│   └── package.json
-│
-├── backend/               # Node.js + Express backend
-│   ├── src/
-│   │   ├── controllers/   # Request handlers
-│   │   ├── routes/        # API routes
-│   │   ├── middleware/    # Auth, validation, errors
-│   │   ├── models/        # Database models
-│   │   ├── services/      # Business logic
-│   │   └── config/        # Configuration
-│   ├── tests/
-│   └── package.json
-│
-├── blockchain/            # Smart contracts & deployment
-│   ├── contracts/         # Solidity contracts
-│   ├── scripts/           # Deployment scripts
-│   ├── test/              # Contract tests
-│   └── hardhat.config.js
-│
-├── docs/                  # Documentation
-│   ├── architecture.md
-│   ├── api.md
-│   └── testing.md
-│
-├── .env.example           # Environment template
-├── .gitignore
-└── README.md
-```
-
-## 🐛 Troubleshooting
-
-### MetaMask Connection Issues
-
-**Problem:** "Wrong network" error  
-**Solution:** Ensure MetaMask is connected to "Hardhat Local" (Chain ID: 31337)
-
-**Problem:** "Insufficient funds"  
-**Solution:** Import an account from Hardhat's generated accounts (they have 10000 ETH each)
-
-### Smart Contract Issues
-
-**Problem:** "Contract not deployed"  
-**Solution:** 
-1. Ensure Hardhat node is running
-2. Deploy contract: `npx hardhat run scripts/deploy.js --network localhost`
-3. Update CONTRACT_ADDRESS in .env
-
-**Problem:** "Transaction reverted"  
-**Solution:** Check Hardhat node logs for detailed error messages
-
-### Backend Issues
-
-**Problem:** "Database connection failed"  
-**Solution:** Check DATABASE_URL in .env file
-
-**Problem:** "JWT authentication error"  
-**Solution:** Ensure JWT_SECRET is set in .env
-
-## 📚 Documentation
-
-- [Architecture Documentation](docs/architecture.md)
-- [API Documentation](docs/api.md)
-- [Testing Guide](docs/testing.md)
-- [Blockchain Guide](docs/blockchain.md)
-
-## 🎓 Academic Context
-
-This project demonstrates:
-
-1. **Blockchain Integration** - Real Ethereum blockchain interaction
-2. **Smart Contract Development** - Solidity programming
-3. **Full-Stack Development** - React + Node.js + Database
-4. **Security Best Practices** - Authentication, authorization, validation
-5. **Cryptographic Concepts** - Hashing, signing, verification
-6. **Distributed Systems** - Decentralized vote storage
-
-## ⚠️ Limitations & Future Enhancements
-
-### Current Limitations
-
-- This is an academic prototype, not production-ready
-- Uses local blockchain (not mainnet)
-- Basic privacy model (wallet addresses visible on-chain)
-- Limited scalability testing
-
-### Future Enhancements
-
-- [ ] Advanced voter anonymity (Zero-Knowledge Proofs)
-- [ ] Differential privacy mechanisms
-- [ ] Self-Sovereign Identity (SSI) integration
-- [ ] Mobile application
-- [ ] Biometric authentication
-- [ ] Multi-election support
-- [ ] Advanced analytics dashboard
-- [ ] Export results as PDF reports
-
-## 📄 License
-
-This project is created for academic purposes.
-
-## 👥 Contributors
-
-Created as a final year engineering project.
-
-## 📧 Support
-
-For issues or questions, refer to the troubleshooting section above or check the documentation in the `docs/` folder.
+*Frontend runs on `http://localhost:3000` or `http://localhost:5173`.*
 
 ---
 
-**⚡ Quick Start Summary**
+## 🎮 Step-by-Step Workflow Guide
 
+### 1. Voter & Host Workflow
+1. **Register**: Go to `/register` and create an account with Name, Voter ID, Email, Phone, and Password.
+2. **Unified Dashboard (`/dashboard`)**:
+   - View active elections and cast votes with MetaMask.
+   - View your dynamic **Election Hosting Status** card.
+3. **Request Hosting Privileges**:
+   - Click **"Request Hosting Permission"** to open `/host-request`.
+   - Provide election title, purpose, expected voter count, and schedule.
+   - Dashboard status transitions to **`PENDING`** (Under Review).
+4. **Create & Manage Election (Once Approved)**:
+   - Once an administrator approves your request, status updates to **`APPROVED`**.
+   - Click **"Create & Host Election"** to access `/elections/create`.
+   - Configure election dates, add candidates, and start the election.
+
+### 2. Administrator Governance Workflow
+1. **Admin Login**: Access `/admin/login` using credentials from `ADMIN_CREDENTIALS.md`.
+2. **Review Host Requests**:
+   - Navigate to the **"Election Host Requests"** tab.
+   - Inspect pending host applications.
+   - **Approve**: Immediately elevates user's status to `APPROVED`, granting election hosting rights.
+   - **Reject**: Provides feedback reason to the user; status updates to `REJECTED` (user can re-apply).
+
+---
+
+## 🧪 Testing
+
+### Backend Authorization & Lifecycle Tests
+Run all 18 test cases validating permissions, route protection, and ownership enforcement:
 ```bash
-# Terminal 1 - Blockchain
-cd blockchain && npx hardhat node
-
-# Terminal 2 - Deploy contract
-cd blockchain && npx hardhat run scripts/deploy.js --network localhost
-# Copy contract address to .env
-
-# Terminal 3 - Backend
-cd backend && npm start
-
-# Terminal 4 - Frontend
-cd frontend && npm start
-
-# Browser - Configure MetaMask to Hardhat Local network
-# Start voting!
+cd backend
+npm test
 ```
+
+### Smart Contract Tests
+Run unit tests validating duplicate prevention, time locks, and tally calculations:
+```bash
+cd blockchain
+npx hardhat test
+```
+
+---
+
+## 🔐 Security Matrix
+
+| Action | Unauthenticated | Standard Voter | Pending Host | Approved Host | Administrator |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| View Active Elections | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Cast Vote via MetaMask | ❌ | ✅ | ✅ | ✅ | ✅ |
+| Submit Host Request | ❌ | ✅ | ❌ | ❌ | N/A |
+| Create Election | ❌ | ❌ | ❌ | ✅ | ✅ |
+| Manage Own Election | ❌ | ❌ | ❌ | ✅ | ✅ |
+| Manage Other's Election | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Review Host Applications | ❌ | ❌ | ❌ | ❌ | ✅ |
+
+---
+
+## 📚 Documentation
+
+- [System Architecture](docs/architecture.md)
+- [REST API Specification](docs/api.md)
+- [Testing & Verification Guide](docs/testing.md)
+- [Blockchain & Smart Contracts](docs/blockchain.md)
+- [Installation & Setup](docs/setup.md)

@@ -1,19 +1,128 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
+  /* Color palette */
+  --color-slate-50: oklch(98.5% 0.004 247);
+  --color-slate-100: oklch(96.9% 0.006 247);
+  --color-slate-200: oklch(93% 0.01 255);
+  --color-slate-300: oklch(87.7% 0.013 254);
+  --color-slate-400: oklch(71.8% 0.02 256);
+  --color-slate-500: oklch(57% 0.024 258);
+  --color-slate-600: oklch(46.3% 0.024 257);
+  --color-slate-700: oklch(38% 0.02 257);
+  --color-slate-800: oklch(28.2% 0.018 260);
+  --color-slate-900: oklch(20.4% 0.016 265);
+  --color-slate-950: oklch(13% 0.013 269);
+
+  --color-indigo-400: oklch(67.5% 0.172 272);
+  --color-indigo-500: oklch(61.3% 0.202 272);
+  --color-indigo-600: oklch(54.7% 0.222 273);
+
+  --color-purple-400: oklch(69.5% 0.204 303);
+
+  --color-green-400: oklch(76.9% 0.174 145);
+  --color-green-500: oklch(71.8% 0.177 142);
+  --color-green-600: oklch(64.2% 0.165 143);
+  --color-green-950: oklch(23% 0.062 146);
+
+  --color-yellow-400: oklch(85.5% 0.162 95);
+
+  --color-amber-500: oklch(76.6% 0.143 68);
+  --color-amber-600: oklch(69.7% 0.149 60);
+  --color-amber-950: oklch(25.3% 0.055 51);
+
+  --color-red-300: oklch(73.2% 0.169 27);
+  --color-red-400: oklch(68.3% 0.206 26);
+  --color-red-500: oklch(62.8% 0.238 27);
+  --color-red-950: oklch(26% 0.089 26);
+
+  --color-gray-300: oklch(84.5% 0.004 286);
+  --color-gray-400: oklch(70.9% 0.006 286);
+  --color-gray-500: oklch(56.8% 0.008 286);
+
+  --color-blue-500: oklch(57% 0.205 252);
+  --color-blue-950: oklch(23.5% 0.064 264);
+}
+
+/* Design System CSS Variables */
+:root {
+  /* Background Colors */
+  --bg-primary: oklch(13% 0.013 269); /* Very dark navy/black */
+  --bg-surface: oklch(16% 0.015 265); /* Slightly lighter dark navy */
+  --bg-elevated: oklch(20.4% 0.016 265); /* Elevated surface */
+
+  /* Text Colors */
+  --text-primary: oklch(98.5% 0.002 247); /* Near white */
+  --text-secondary: oklch(71.8% 0.02 256); /* Muted slate */
+  --text-muted: oklch(57% 0.024 258); /* More muted */
+
+  /* Brand Colors */
+  --color-primary: oklch(61.3% 0.202 272); /* Indigo */
+  --color-primary-hover: oklch(67.5% 0.172 272); /* Lighter indigo */
+  --color-accent: oklch(67.5% 0.172 272); /* Subtle cyan/indigo */
+
+  /* Status Colors */
+  --color-success: oklch(71.8% 0.177 142); /* Green */
+  --color-danger: oklch(62.8% 0.238 27); /* Red */
+  --color-warning: oklch(76.6% 0.143 68); /* Amber */
+  --color-info: oklch(57% 0.205 252); /* Blue */
+
+  /* Spacing Scale */
+  --spacing-xs: 0.25rem; /* 4px */
+  --spacing-sm: 0.5rem; /* 8px */
+  --spacing-md: 1rem; /* 16px */
+  --spacing-lg: 1.5rem; /* 24px */
+  --spacing-xl: 2rem; /* 32px */
+  --spacing-2xl: 3rem; /* 48px */
+
+  /* Border Radius */
+  --radius-sm: 0.5rem; /* 8px */
+  --radius-md: 0.75rem; /* 12px */
+  --radius-lg: 1rem; /* 16px */
+  --radius-xl: 1.5rem; /* 24px */
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1);
+
+  /* Transitions */
+  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-base: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 350ms cubic-bezier(0.4, 0, 0.2, 1);
+}
 
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #020617;
-  color: #f8fafc;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.6;
 }
 
 code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
+  font-family: var(--font-mono);
+}
+
+/* Focus visible styles for accessibility */
+*:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Selection color */
+::selection {
+  background-color: var(--color-primary);
+  color: white;
 }

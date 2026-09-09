@@ -12,6 +12,9 @@ const electionRoutes = require('./routes/electionRoutes');
 const candidateRoutes = require('./routes/candidateRoutes');
 const blockchainRoutes = require('./routes/blockchainRoutes');
 const voterRoutes = require('./routes/voterRoutes');
+const hostRequestRoutes = require('./routes/hostRequestRoutes');
+const auditLogRoutes = require('./routes/auditLogRoutes');
+const reportRoutes = require('./routes/reportRoutes');
 
 const app = express();
 
@@ -19,10 +22,27 @@ const app = express();
 app.use(helmet());
 
 // CORS configuration
-app.use(cors({
-  origin: config.cors.origin,
+const corsOptions = {
+  origin: (origin, callback) => {
+    // Allow non-browser tools / same-origin (no origin header)
+    if (!origin) return callback(null, true);
+
+    // In development, dynamically allow any localhost / 127.0.0.1 port (Vite on 3000, 5173, etc.)
+    if (config.nodeEnv === 'development' || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+      return callback(null, true);
+    }
+
+    if (origin === config.cors.origin) {
+      return callback(null, true);
+    }
+
+    callback(null, true);
+  },
   credentials: true,
-}));
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+};
+app.use(cors(corsOptions));
 
 // Rate limiting
 const limiter = rateLimit({
@@ -61,6 +81,9 @@ app.use('/api/elections', electionRoutes);
 app.use('/api/candidates', candidateRoutes);
 app.use('/api/blockchain', blockchainRoutes);
 app.use('/api/voters', voterRoutes);
+app.use('/api/host-requests', hostRequestRoutes);
+app.use('/api/audit-logs', auditLogRoutes);
+app.use('/api/reports', reportRoutes);
 
 // 404 handler
 app.use(notFound);

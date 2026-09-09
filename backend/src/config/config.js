@@ -1,4 +1,10 @@
-require('dotenv').config();
+const path = require('path');
+
+// Ensure environment variables are loaded from backend/.env or root .env
+require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
+require('dotenv').config({ path: path.resolve(__dirname, '../../../.env') });
+
+const defaultDbStorage = path.resolve(__dirname, '../../database.sqlite');
 
 module.exports = {
   // Server configuration
@@ -7,15 +13,15 @@ module.exports = {
 
   // Database configuration
   database: {
-    url: process.env.DATABASE_URL || 'sqlite:./database.sqlite',
+    url: process.env.DATABASE_URL || `sqlite:${defaultDbStorage}`,
     dialect: 'sqlite',
-    storage: './database.sqlite',
+    storage: process.env.DATABASE_STORAGE || defaultDbStorage,
     logging: false,
   },
 
   // JWT configuration
   jwt: {
-    secret: process.env.JWT_SECRET || 'your-secret-key-change-this-in-production',
+    secret: process.env.JWT_SECRET || 'dev-secret-key-change-this-in-production-123',
     expiresIn: process.env.JWT_EXPIRES_IN || '24h',
   },
 
@@ -34,15 +40,15 @@ module.exports = {
 
   // Admin credentials
   admin: {
-    email: process.env.ADMIN_EMAIL || 'admin@voting.local',
-    password: process.env.ADMIN_PASSWORD || 'Admin@123',
-    name: 'System Administrator',
-    voterId: 'ADMIN001',
+    email: process.env.ADMIN_EMAIL || 'admin@blockvote.local',
+    password: process.env.ADMIN_PASSWORD || 'Admin#BV2026!SecP@ss',
+    name: 'BlockVote Administrator',
+    voterId: 'admin',
   },
 
   // Rate limiting
   rateLimit: {
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100, // Limit each IP to 100 requests per windowMs
+    max: 1000, // Generous limit for local development/testing
   },
 };

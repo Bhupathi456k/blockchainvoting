@@ -53,8 +53,16 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const login = async (credentials) => {
-    const response = await authAPI.login(credentials);
+  const login = async (credentialsOrIdentifier, maybePassword) => {
+    let payload = credentialsOrIdentifier;
+    if (typeof credentialsOrIdentifier === 'string') {
+      payload = {
+        identifier: credentialsOrIdentifier,
+        password: maybePassword,
+      };
+    }
+
+    const response = await authAPI.login(payload);
     const { token, user: userData } = response.data.data;
 
     localStorage.setItem('token', token);
@@ -114,6 +122,10 @@ export const AuthProvider = ({ children }) => {
     connectWallet,
     isAdmin: user?.role === 'ADMIN',
     isVoter: user?.role === 'VOTER',
+    hostPermissionStatus: user?.hostPermissionStatus || 'NONE',
+    canHostElections: user?.hostPermissionStatus === 'APPROVED' || user?.role === 'ADMIN',
+    hasHostPermissionPending: user?.hostPermissionStatus === 'PENDING',
+    hasHostPermissionRejected: user?.hostPermissionStatus === 'REJECTED',
     refreshUser: fetchUserProfile,
   };
 

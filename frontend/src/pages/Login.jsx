@@ -1,7 +1,11 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { LogIn, AlertCircle } from 'lucide-react';
+import { LogIn, AlertCircle, User } from 'lucide-react';
+import Button from '../components/ui/Button';
+import Input from '../components/ui/Input';
+import Card from '../components/ui/Card';
+import Container from '../components/ui/Container';
 
 const Login = () => {
   const [identifier, setIdentifier] = useState('');
@@ -32,74 +36,72 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-[85vh] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl">
-        <div className="text-center mb-8">
-          <div className="mx-auto h-12 w-12 bg-indigo-600/20 text-indigo-400 flex items-center justify-center rounded-xl mb-4 border border-indigo-500/30">
-            <LogIn className="h-6 w-6" />
+    <div className="py-12 sm:py-16">
+      <Container size="sm" className="max-w-md">
+        <Card className="bg-slate-900/95 border-slate-800 shadow-2xl p-6 sm:p-8">
+          {/* Header */}
+          <div className="text-center mb-8">
+            <div className="mx-auto h-12 w-12 bg-indigo-950/60 text-indigo-400 flex items-center justify-center rounded-xl mb-4 border border-indigo-800/50 shadow-inner">
+              <LogIn className="h-6 w-6" />
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
+              Sign in to your account
+            </h1>
+            <p className="text-sm text-slate-400 mt-2">
+              Enter your Voter ID or Email and password to access the voting platform
+            </p>
           </div>
-          <h2 className="text-2xl font-bold text-white tracking-tight">Sign in to your account</h2>
-          <p className="text-sm text-gray-400 mt-2">
-            Enter your Voter ID or Email and password to access the voting platform
-          </p>
-        </div>
 
-        {error && (
-          <div className="mb-6 bg-red-950/50 border border-red-500/50 rounded-xl p-4 flex items-start space-x-3 text-red-300 text-sm">
-            <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5 text-red-400" />
-            <span>{error}</span>
-          </div>
-        )}
+          {/* Error Banner */}
+          {error && (
+            <div className="mb-6 bg-red-950/40 border border-red-800/60 rounded-xl p-4 flex items-start space-x-3 text-red-300 text-sm">
+              <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5 text-red-400" />
+              <span>{error}</span>
+            </div>
+          )}
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Email or Voter ID
-            </label>
-            <input
+          <form onSubmit={handleSubmit} noValidate className="space-y-5">
+            <Input
+              label="Email or Voter ID"
               type="text"
               required
               value={identifier}
               onChange={(e) => setIdentifier(e.target.value)}
               placeholder="e.g. voter@example.com or VOTER123"
-              className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+              leftIcon={User}
             />
-          </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Password
-            </label>
-            <input
+            <Input
+              label="Password"
               type="password"
               required
+              showPasswordToggle
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+              placeholder="Enter your password"
             />
+
+            <div className="pt-2">
+              <Button
+                type="submit"
+                size="lg"
+                loading={loading}
+                className="w-full shadow-indigo-900/40"
+              >
+                {loading ? 'Signing in...' : 'Sign In'}
+              </Button>
+            </div>
+          </form>
+
+          {/* Footer Link */}
+          <div className="mt-8 pt-6 border-t border-slate-800 text-center text-sm text-slate-400">
+            Don't have an account?{' '}
+            <Link to="/register" className="text-indigo-400 hover:text-indigo-300 font-medium transition-colors">
+              Register as a Voter
+            </Link>
           </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-xl shadow-lg transition duration-150 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
-          >
-            {loading ? (
-              <span className="inline-block animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></span>
-            ) : (
-              <span>Sign In</span>
-            )}
-          </button>
-        </form>
-
-        <div className="mt-6 text-center text-sm text-gray-400">
-          Don't have an account?{' '}
-          <Link to="/register" className="text-indigo-400 hover:text-indigo-300 font-medium">
-            Register as a Voter
-          </Link>
-        </div>
-      </div>
+        </Card>
+      </Container>
     </div>
   );
 };

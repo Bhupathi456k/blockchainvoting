@@ -1,74 +1,118 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Vote, Shield, Zap, Lock, CheckCircle, ArrowRight } from 'lucide-react';
+import { ShieldCheck, LockKeyhole, Zap, BadgeCheck, ArrowRight, Shield } from 'lucide-react';
+import Button from '../components/ui/Button';
+import Card from '../components/ui/Card';
+import Container from '../components/ui/Container';
 
 const Home = () => {
+  const features = [
+    {
+      icon: ShieldCheck,
+      iconColor: 'text-indigo-400',
+      iconBg: 'bg-indigo-950/40 border-indigo-800/50',
+      title: 'Blockchain Security',
+      description: 'All votes are immutably recorded on the Ethereum blockchain ensuring complete tamper-resistance.',
+    },
+    {
+      icon: LockKeyhole,
+      iconColor: 'text-emerald-400',
+      iconBg: 'bg-emerald-950/40 border-emerald-800/50',
+      title: 'Duplicate Prevention',
+      description: 'Smart contracts cryptographically enforce one-vote-per-voter integrity at the protocol layer.',
+    },
+    {
+      icon: Zap,
+      iconColor: 'text-amber-400',
+      iconBg: 'bg-amber-950/40 border-amber-800/50',
+      title: 'Real-time Results',
+      description: 'Live vote tabulations computed deterministically directly from smart contract state.',
+    },
+    {
+      icon: BadgeCheck,
+      iconColor: 'text-cyan-400',
+      iconBg: 'bg-cyan-950/40 border-cyan-800/50',
+      title: 'Verifiable Transactions',
+      description: 'Every ballot cast produces a cryptographic receipt verifiable on the public ledger.',
+    },
+  ];
+
   return (
-    <div className="min-h-[90vh]">
-      {/* Hero Section */}
-      <div className="max-w-7xl mx-auto px-4 py-20 text-center">
-        <div className="mb-6">
-          <Vote className="h-16 w-16 text-indigo-400 mx-auto mb-4" />
-        </div>
-        <h1 className="text-5xl md:text-6xl font-bold mb-6 bg-gradient-to-r from-indigo-400 to-purple-400 text-transparent bg-clip-text">
-          Secure Digital Voting Platform
-        </h1>
-        <p className="text-xl text-gray-400 mb-8 max-w-2xl mx-auto">
-          A tamper-proof electronic voting system powered by Ethereum blockchain technology and smart contracts
-        </p>
-        <div className="flex flex-col sm:flex-row gap-4 justify-center">
-          <Link
-            to="/register"
-            className="px-8 py-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl shadow-lg transition flex items-center justify-center space-x-2"
-          >
-            <span>Register to Vote</span>
-            <ArrowRight className="h-5 w-5" />
-          </Link>
-          <Link
-            to="/login"
-            className="px-8 py-4 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl border border-slate-700 transition"
-          >
-            Sign In
-          </Link>
-        </div>
-      </div>
-
-      {/* Features */}
-      <div className="max-w-7xl mx-auto px-4 py-16">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-            <Shield className="h-10 w-10 text-indigo-400 mb-4" />
-            <h3 className="text-lg font-bold text-white mb-2">Blockchain Security</h3>
-            <p className="text-sm text-gray-400">
-              All votes stored on Ethereum blockchain for tamper-proof transparency
-            </p>
+    <div className="py-8 md:py-16">
+      <Container size="lg">
+        {/* Hero Section */}
+        <div className="max-w-4xl mx-auto text-center pt-6 pb-16 md:pt-12 md:pb-24">
+          {/* Eyebrow */}
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-indigo-950/60 border border-indigo-800/60 text-indigo-400 text-xs font-semibold tracking-wider uppercase mb-6 shadow-inner">
+            <Shield className="h-3.5 w-3.5 text-indigo-400" />
+            <span>Secure Digital Voting</span>
           </div>
 
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-            <Lock className="h-10 w-10 text-green-400 mb-4" />
-            <h3 className="text-lg font-bold text-white mb-2">Duplicate Prevention</h3>
-            <p className="text-sm text-gray-400">
-              Smart contract prevents duplicate voting at the blockchain level
-            </p>
-          </div>
+          {/* Main Heading */}
+          <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold tracking-tight text-white mb-6 leading-tight">
+            Secure voting.{' '}
+            <span className="bg-gradient-to-r from-indigo-400 via-indigo-300 to-cyan-400 bg-clip-text text-transparent">
+              Verified by blockchain.
+            </span>
+          </h1>
 
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-            <Zap className="h-10 w-10 text-yellow-400 mb-4" />
-            <h3 className="text-lg font-bold text-white mb-2">Real-time Results</h3>
-            <p className="text-sm text-gray-400">
-              Vote counting directly calculated from blockchain state
-            </p>
-          </div>
+          {/* Supporting Text */}
+          <p className="text-lg sm:text-xl text-slate-400 mb-10 max-w-2xl mx-auto leading-relaxed font-normal">
+            A secure and transparent electronic voting platform powered by Ethereum smart contracts.
+          </p>
 
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-            <CheckCircle className="h-10 w-10 text-purple-400 mb-4" />
-            <h3 className="text-lg font-bold text-white mb-2">Verifiable</h3>
-            <p className="text-sm text-gray-400">
-              Every transaction verified with transaction hash and block number
-            </p>
+          {/* CTA Buttons */}
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 max-w-md mx-auto">
+            <Link to="/register" className="w-full sm:w-auto">
+              <Button size="lg" className="w-full sm:w-auto shadow-indigo-900/40" rightIcon={ArrowRight}>
+                Register to Vote
+              </Button>
+            </Link>
+            <Link to="/login" className="w-full sm:w-auto">
+              <Button variant="secondary" size="lg" className="w-full sm:w-auto">
+                Sign In
+              </Button>
+            </Link>
           </div>
         </div>
-      </div>
+
+        {/* Feature Section */}
+        <div className="pt-8 pb-12">
+          <div className="text-center max-w-2xl mx-auto mb-12">
+            <h2 className="text-2xl sm:text-3xl font-bold text-white mb-3 tracking-tight">
+              Enterprise-grade Election Integrity
+            </h2>
+            <p className="text-slate-400 text-sm sm:text-base">
+              Designed with decentralized architecture to eliminate single points of failure and ensure trustless consensus.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {features.map((feature, index) => {
+              const Icon = feature.icon;
+              return (
+                <Card
+                  key={index}
+                  hover
+                  className="p-6 bg-slate-900/80 border-slate-800 hover:border-slate-700 transition-all duration-200 flex flex-col justify-between"
+                >
+                  <div>
+                    <div className={`h-12 w-12 rounded-xl flex items-center justify-center mb-5 border ${feature.iconBg}`}>
+                      <Icon className={`h-6 w-6 ${feature.iconColor}`} />
+                    </div>
+                    <h3 className="text-lg font-semibold text-white mb-2 tracking-tight">
+                      {feature.title}
+                    </h3>
+                    <p className="text-sm text-slate-400 leading-relaxed">
+                      {feature.description}
+                    </p>
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
+      </Container>
     </div>
   );
 };

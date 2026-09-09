@@ -1,0 +1,29 @@
+{
+  "name": "blockchain-voting-platform",
+  "version": "1.0.0",
+  "description": "Secure Digital Voting Platform Using Blockchain Technology",
+  "private": true,
+  "scripts": {
+    "install:all": "cd backend && npm install && cd ../frontend && npm install && cd ../blockchain && npm install",
+    "blockchain": "cd blockchain && npx hardhat node",
+    "deploy": "cd blockchain && npx hardhat run scripts/deploy.js --network localhost",
+    "backend": "cd backend && npm start",
+    "frontend": "cd frontend && npm start",
+    "seed": "cd backend && npm run seed",
+    "seed:admin": "cd backend && npm run seed:admin",
+    "seed:accounts": "cd backend && npm run seed:accounts",
+    "db:seed": "cd backend && npm run seed",
+    "test:blockchain": "cd blockchain && npm test",
+    "test:backend": "cd backend && npm test",
+    "test:all": "npm run test:blockchain && npm run test:backend"
+  },
+  "keywords": [
+    "blockchain",
+    "voting",
+    "ethereum",
+    "solidity",
+    "smart-contracts"
+  ],
+  "author": "",
+  "license": "ISC"
+}

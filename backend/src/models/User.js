@@ -38,6 +38,11 @@ const User = sequelize.define('User', {
     defaultValue: 'VOTER',
     allowNull: false,
   },
+  hostPermissionStatus: {
+    type: DataTypes.ENUM('NONE', 'PENDING', 'APPROVED', 'REJECTED'),
+    defaultValue: 'NONE',
+    allowNull: false,
+  },
   walletAddress: {
     type: DataTypes.STRING(42),
     allowNull: true,

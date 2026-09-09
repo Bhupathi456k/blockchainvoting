@@ -3,6 +3,8 @@ const User = require('./User');
 const Election = require('./Election');
 const Candidate = require('./Candidate');
 const BlockchainTransaction = require('./BlockchainTransaction');
+const ElectionHostRequest = require('./ElectionHostRequest');
+const AuditLog = require('./AuditLog');
 
 // Define associations
 Election.hasMany(Candidate, {
@@ -37,29 +39,54 @@ BlockchainTransaction.belongsTo(User, {
   as: 'user',
 });
 
+// Audit Log associations
+User.hasMany(AuditLog, {
+  foreignKey: 'userId',
+  as: 'auditLogs',
+});
+
+AuditLog.belongsTo(User, {
+  foreignKey: 'userId',
+  as: 'user',
+});
+
+// Election Host Request associations
+User.hasMany(ElectionHostRequest, {
+  foreignKey: 'userId',
+  as: 'hostRequests',
+});
+
+ElectionHostRequest.belongsTo(User, {
+  foreignKey: 'userId',
+  as: 'requester',
+});
+
+ElectionHostRequest.belongsTo(User, {
+  foreignKey: 'reviewedBy',
+  as: 'reviewer',
+});
+
+// Election ownership
+User.hasMany(Election, {
+  foreignKey: 'hostUserId',
+  as: 'hostedElections',
+});
+
+Election.belongsTo(User, {
+  foreignKey: 'hostUserId',
+  as: 'host',
+});
+
 // Initialize database
 const initDatabase = async () => {
   try {
-    // Sync all models
-    await sequelize.sync({ alter: true });
+    // Sync all models (safe create if not exists)
+    await sequelize.sync();
     console.log('✓ Database models synchronized');
 
-    // Create admin user if doesn't exist
-    const config = require('../config/config');
-    const adminExists = await User.findOne({ where: { email: config.admin.email } });
-
-    if (!adminExists) {
-      const passwordHash = await User.hashPassword(config.admin.password);
-      await User.create({
-        voterId: config.admin.voterId,
-        name: config.admin.name,
-        email: config.admin.email,
-        passwordHash: passwordHash,
-        role: 'ADMIN',
-        isEligible: true,
-      });
-      console.log('✓ Admin user created');
-    }
+    // Run idempotent account seeder to guarantee admin & demo credentials
+    const { seedAccounts } = require('../scripts/seedAccounts');
+    await seedAccounts();
   } catch (error) {
     console.error('✗ Database initialization failed:', error.message);
     throw error;
@@ -72,5 +99,7 @@ module.exports = {
   Election,
   Candidate,
   BlockchainTransaction,
+  ElectionHostRequest,
+  AuditLog,
   initDatabase,
 };

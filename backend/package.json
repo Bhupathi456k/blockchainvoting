@@ -6,7 +6,11 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "test": "jest --runInBand --detectOpenHandles"
+    "test": "jest --runInBand --detectOpenHandles",
+    "seed": "node src/scripts/seedAccounts.js",
+    "seed:admin": "node src/scripts/seedAdmin.js",
+    "seed:accounts": "node src/scripts/seedAccounts.js",
+    "db:seed": "node src/scripts/seedAccounts.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

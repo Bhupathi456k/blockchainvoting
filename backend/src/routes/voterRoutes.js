@@ -47,4 +47,28 @@ router.patch(
   voterController.updateVoterEligibility
 );
 
+/**
+ * @route   POST /api/voters/:id/authorize-on-chain
+ * @desc    Authorize voter wallet on-chain
+ * @access  Private (Admin)
+ */
+router.post(
+  '/:id/authorize-on-chain',
+  authenticate,
+  authorize('ADMIN'),
+  voterController.authorizeVoterOnChain
+);
+
+/**
+ * @route   POST /api/voters/batch-authorize-on-chain
+ * @desc    Batch authorize all eligible voters with wallets on-chain
+ * @access  Private (Admin)
+ */
+router.post(
+  '/batch-authorize-on-chain',
+  authenticate,
+  authorize('ADMIN'),
+  voterController.batchAuthorizeVotersOnChain
+);
+
 module.exports = router;

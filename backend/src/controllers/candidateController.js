@@ -1,7 +1,8 @@
 const { Candidate, Election } = require('../models');
+const AuditService = require('../services/auditService');
 
 /**
- * Create candidate for an election (Admin only)
+ * Create candidate for an election (Owner or Admin)
  */
 const createCandidate = async (req, res, next) => {
   try {
@@ -15,6 +16,8 @@ const createCandidate = async (req, res, next) => {
         error: 'Election not found',
       });
     }
+
+    // Ownership check already handled by requireElectionOwner middleware
 
     if (election.status !== 'DRAFT') {
       return res.status(400).json({
@@ -30,6 +33,8 @@ const createCandidate = async (req, res, next) => {
       description,
       imageUrl,
     });
+
+    AuditService.logCandidate('CANDIDATE_CREATED', candidate, req.user, req);
 
     res.status(201).json({
       success: true,
@@ -98,7 +103,7 @@ const getCandidateById = async (req, res, next) => {
 };
 
 /**
- * Update candidate (Admin only, only before election starts)
+ * Update candidate (Owner or Admin, only before election starts)
  */
 const updateCandidate = async (req, res, next) => {
   try {
@@ -116,6 +121,14 @@ const updateCandidate = async (req, res, next) => {
       });
     }
 
+    // Check ownership: must be admin or election owner
+    if (req.user.role !== 'ADMIN' && candidate.election.hostUserId !== req.user.id) {
+      return res.status(403).json({
+        success: false,
+        error: 'You do not have permission to modify this candidate',
+      });
+    }
+
     if (candidate.election.status !== 'DRAFT') {
       return res.status(400).json({
         success: false,
@@ -130,6 +143,8 @@ const updateCandidate = async (req, res, next) => {
       imageUrl: imageUrl !== undefined ? imageUrl : candidate.imageUrl,
     });
 
+    AuditService.logCandidate('CANDIDATE_UPDATED', candidate, req.user, req);
+
     res.status(200).json({
       success: true,
       message: 'Candidate updated successfully',
@@ -141,7 +156,7 @@ const updateCandidate = async (req, res, next) => {
 };
 
 /**
- * Delete candidate (Admin only, only before election starts)
+ * Delete candidate (Owner or Admin, only before election starts)
  */
 const deleteCandidate = async (req, res, next) => {
   try {
@@ -158,12 +173,22 @@ const deleteCandidate = async (req, res, next) => {
       });
     }
 
+    // Check ownership: must be admin or election owner
+    if (req.user.role !== 'ADMIN' && candidate.election.hostUserId !== req.user.id) {
+      return res.status(403).json({
+        success: false,
+        error: 'You do not have permission to delete this candidate',
+      });
+    }
+
     if (candidate.election.status !== 'DRAFT') {
       return res.status(400).json({
         success: false,
         error: 'Cannot delete candidates after election has started',
       });
     }
+
+    AuditService.logCandidate('CANDIDATE_DELETED', candidate, req.user, req);
 
     await candidate.destroy();
 

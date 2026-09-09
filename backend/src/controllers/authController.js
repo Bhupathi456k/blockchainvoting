@@ -2,6 +2,7 @@ const jwt = require('jsonwebtoken');
 const { User, BlockchainTransaction } = require('../models');
 const config = require('../config/config');
 const blockchainService = require('../services/blockchainService');
+const AuditService = require('../services/auditService');
 
 /**
  * Register a new voter
@@ -13,6 +14,7 @@ const register = async (req, res, next) => {
     // Check if voterId or email already exists
     const existingVoterId = await User.findOne({ where: { voterId } });
     if (existingVoterId) {
+      AuditService.logAuth('USER_REGISTER_FAILED', null, req, { reason: 'Duplicate voter ID', voterId }, 'FAILURE');
       return res.status(409).json({
         success: false,
         error: 'A voter with this Voter ID is already registered',
@@ -21,6 +23,7 @@ const register = async (req, res, next) => {
 
     const existingEmail = await User.findOne({ where: { email } });
     if (existingEmail) {
+      AuditService.logAuth('USER_REGISTER_FAILED', null, req, { reason: 'Duplicate email', email }, 'FAILURE');
       return res.status(409).json({
         success: false,
         error: 'A voter with this email address is already registered',
@@ -31,6 +34,7 @@ const register = async (req, res, next) => {
     if (walletAddress) {
       const existingWallet = await User.findOne({ where: { walletAddress } });
       if (existingWallet) {
+        AuditService.logAuth('USER_REGISTER_FAILED', null, req, { reason: 'Duplicate wallet address', walletAddress }, 'FAILURE');
         return res.status(409).json({
           success: false,
           error: 'This wallet address is already linked to another account',
@@ -54,6 +58,9 @@ const register = async (req, res, next) => {
       hasVoted: false,
     });
 
+    // Record Audit Log
+    AuditService.logAuth('USER_REGISTER', user, req, { voterId: user.voterId, role: user.role });
+
     // Generate JWT token
     const token = jwt.sign(
       { userId: user.id, email: user.email, role: user.role },
@@ -73,6 +80,7 @@ const register = async (req, res, next) => {
           email: user.email,
           phone: user.phone,
           role: user.role,
+          hostPermissionStatus: user.hostPermissionStatus,
           walletAddress: user.walletAddress,
           isEligible: user.isEligible,
           hasVoted: user.hasVoted,
@@ -90,18 +98,21 @@ const register = async (req, res, next) => {
 const login = async (req, res, next) => {
   try {
     const { identifier, password } = req.body; // identifier can be email or voterId
+    const trimmedId = (identifier || '').trim();
 
-    // Find user by email or voterId
+    // Find user by email (case-insensitive) or voterId
     const user = await User.findOne({
       where: {
         [require('sequelize').Op.or]: [
-          { email: identifier },
-          { voterId: identifier },
+          { email: trimmedId.toLowerCase() },
+          { email: trimmedId },
+          { voterId: trimmedId },
         ],
       },
     });
 
     if (!user) {
+      AuditService.logAuth('USER_FAILED_LOGIN', null, req, { reason: 'User not found', identifier: trimmedId }, 'FAILURE');
       return res.status(401).json({
         success: false,
         error: 'Invalid credentials. User not found.',
@@ -111,11 +122,15 @@ const login = async (req, res, next) => {
     // Verify password
     const isPasswordValid = await user.comparePassword(password);
     if (!isPasswordValid) {
+      AuditService.logAuth('USER_FAILED_LOGIN', user, req, { reason: 'Incorrect password' }, 'FAILURE');
       return res.status(401).json({
         success: false,
         error: 'Invalid credentials. Password incorrect.',
       });
     }
+
+    // Record Audit Log
+    AuditService.logAuth('USER_LOGIN', user, req, { role: user.role, hostPermissionStatus: user.hostPermissionStatus });
 
     // Generate JWT token
     const token = jwt.sign(
@@ -150,6 +165,7 @@ const login = async (req, res, next) => {
           email: user.email,
           phone: user.phone,
           role: user.role,
+          hostPermissionStatus: user.hostPermissionStatus,
           walletAddress: user.walletAddress,
           isEligible: user.isEligible,
           hasVoted: user.hasVoted,
@@ -195,6 +211,7 @@ const getMe = async (req, res, next) => {
           email: user.email,
           phone: user.phone,
           role: user.role,
+          hostPermissionStatus: user.hostPermissionStatus,
           walletAddress: user.walletAddress,
           isEligible: user.isEligible,
           hasVoted: user.hasVoted,
