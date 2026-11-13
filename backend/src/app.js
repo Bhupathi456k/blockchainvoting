@@ -4,6 +4,7 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 const config = require('./config/config');
+const { connectDB } = require('./config/database');
 const { errorHandler, notFound } = require('./middleware/errorHandler');
 
 // Import routes
@@ -18,16 +19,24 @@ const reportRoutes = require('./routes/reportRoutes');
 
 const app = express();
 
+// Ensure DB connected for every request
+app.use(async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Security headers
 app.use(helmet());
 
 // CORS configuration
 const corsOptions = {
   origin: (origin, callback) => {
-    // Allow non-browser tools / same-origin (no origin header)
     if (!origin) return callback(null, true);
 
-    // In development, dynamically allow any localhost / 127.0.0.1 port (Vite on 3000, 5173, etc.)
     if (config.nodeEnv === 'development' || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
       return callback(null, true);
     }

@@ -2,12 +2,69 @@ const { Election, Candidate, BlockchainTransaction, User } = require('../models'
 const blockchainService = require('../services/blockchainService');
 const AuditService = require('../services/auditService');
 
+const escapeRegex = (string) => {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+};
+
+const computeStatusFromDates = (startTime, endTime, explicitStatus = null) => {
+  if (explicitStatus === 'DRAFT' || explicitStatus === 'CANCELLED') {
+    return explicitStatus;
+  }
+  const now = new Date();
+  const start = new Date(startTime);
+  const end = new Date(endTime);
+
+  if (now < start) {
+    return 'UPCOMING';
+  } else if (now >= start && now <= end) {
+    return 'ACTIVE';
+  } else {
+    return 'ENDED';
+  }
+};
+
+const autoSyncElectionStatuses = async () => {
+  try {
+    const now = new Date();
+    // Move UPCOMING elections whose startTime has arrived to ACTIVE
+    await Election.updateMany(
+      {
+        status: 'UPCOMING',
+        startTime: { $lte: now },
+        endTime: { $gte: now },
+      },
+      { $set: { status: 'ACTIVE' } }
+    );
+
+    // Move ACTIVE or UPCOMING elections whose endTime has passed to ENDED
+    await Election.updateMany(
+      {
+        status: { $in: ['UPCOMING', 'ACTIVE'] },
+        endTime: { $lt: now },
+      },
+      { $set: { status: 'ENDED' } }
+    );
+  } catch (err) {
+    console.warn('Status auto-sync warning:', err.message);
+  }
+};
+
 /**
  * Create a new election (Approved Host or Admin)
  */
 const createElection = async (req, res, next) => {
   try {
-    const { title, description, startTime, endTime } = req.body;
+    const {
+      title,
+      description,
+      startTime,
+      endTime,
+      type,
+      organization,
+      category,
+      visibility = 'PUBLIC',
+      status: reqStatus,
+    } = req.body;
 
     const start = new Date(startTime);
     const end = new Date(endTime);
@@ -19,13 +76,20 @@ const createElection = async (req, res, next) => {
       });
     }
 
+    const initialStatus = computeStatusFromDates(start, end, reqStatus);
+    const electionVisibility = (visibility && visibility.toUpperCase() === 'PRIVATE') ? 'PRIVATE' : 'PUBLIC';
+
     const election = await Election.create({
       title,
       description,
+      type,
+      organization,
+      category,
       startTime: start,
       endTime: end,
-      status: 'DRAFT',
-      hostUserId: req.user.id, // Track who created this election
+      status: initialStatus,
+      visibility: electionVisibility,
+      hostUserId: req.user.id,
     });
 
     AuditService.logElection('ELECTION_CREATED', election, req.user, req);
@@ -41,24 +105,118 @@ const createElection = async (req, res, next) => {
 };
 
 /**
- * Get all elections
+ * Get all elections with filtering, search, sorting, and pagination
  */
 const getElections = async (req, res, next) => {
   try {
-    const elections = await Election.findAll({
-      include: [
-        {
-          model: Candidate,
-          as: 'candidates',
-          attributes: ['id', 'name', 'party', 'description', 'blockchainCandidateId'],
-        },
-      ],
-      order: [['createdAt', 'DESC']],
-    });
+    await autoSyncElectionStatuses();
+
+    const {
+      q, // search query
+      status, // filter by status
+      sort, // sort by field:startTime, endTime, createdAt, title
+      page = 1,
+      limit = 12,
+    } = req.query;
+
+    let pageNum = parseInt(page, 10);
+    let limitNum = parseInt(limit, 10);
+    if (isNaN(pageNum) || pageNum < 1) pageNum = 1;
+    if (isNaN(limitNum) || limitNum < 1 || limitNum > 100) limitNum = 12;
+
+    const offset = (pageNum - 1) * limitNum;
+
+    const isAdmin = req.user && req.user.role === 'ADMIN';
+    const userId = req.user ? (req.user.id || req.user._id) : null;
+
+    const conditions = [];
+
+    // 1. Visibility & Ownership Authorization Filter
+    if (!isAdmin) {
+      const userDiscoveryClause = {
+        $or: [
+          {
+            $and: [
+              {
+                $or: [
+                  { visibility: 'PUBLIC' },
+                  { visibility: { $exists: false } },
+                  { visibility: null },
+                ],
+              },
+              { status: { $in: ['UPCOMING', 'ACTIVE', 'ENDED'] } },
+            ],
+          },
+          ...(userId ? [{ hostUserId: userId }] : []),
+        ],
+      };
+      conditions.push(userDiscoveryClause);
+    }
+
+    // 2. Search Query Filter (q)
+    if (q && typeof q === 'string') {
+      const searchTerm = q.trim();
+      if (searchTerm) {
+        const regex = new RegExp(escapeRegex(searchTerm), 'i');
+        conditions.push({
+          $or: [
+            { title: regex },
+            { description: regex },
+            { type: regex },
+            { organization: regex },
+            { category: regex },
+          ],
+        });
+      }
+    }
+
+    // 3. Status Filter (status)
+    if (status && typeof status === 'string') {
+      const statusVal = status.trim().toUpperCase();
+      if (['DRAFT', 'UPCOMING', 'ACTIVE', 'ENDED', 'CANCELLED'].includes(statusVal)) {
+        conditions.push({ status: statusVal });
+      }
+    }
+
+    const finalQuery = conditions.length > 0 ? { $and: conditions } : {};
+
+    let sortObj = { createdAt: -1 };
+    if (sort && typeof sort === 'string') {
+      const sortParts = sort.split(':');
+      const field = sortParts[0];
+      const direction = sortParts[1] && sortParts[1].toUpperCase() === 'ASC' ? 1 : -1;
+      const allowedFields = ['title', 'startTime', 'endTime', 'createdAt'];
+      if (allowedFields.includes(field)) {
+        sortObj = { [field]: direction };
+      }
+    }
+
+    const count = await Election.countDocuments(finalQuery);
+    const electionsRaw = await Election.find(finalQuery)
+      .sort(sortObj)
+      .skip(offset)
+      .limit(limitNum);
+
+    const elections = await Promise.all(
+      electionsRaw.map(async (el) => {
+        const candidates = await Candidate.find({ electionId: el._id }).select('id name party description blockchainCandidateId');
+        const elObj = el.toObject();
+        elObj.candidates = candidates;
+        return elObj;
+      })
+    );
 
     res.status(200).json({
       success: true,
-      data: elections,
+      data: {
+        elections,
+        pagination: {
+          total: count,
+          page: pageNum,
+          limit: limitNum,
+          totalPages: Math.ceil(count / limitNum) || 1,
+        },
+      },
     });
   } catch (error) {
     next(error);
@@ -72,21 +230,7 @@ const getElectionById = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    const election = await Election.findByPk(id, {
-      include: [
-        {
-          model: Candidate,
-          as: 'candidates',
-        },
-        {
-          model: BlockchainTransaction,
-          as: 'transactions',
-          limit: 10,
-          order: [['createdAt', 'DESC']],
-        },
-      ],
-    });
-
+    const election = await Election.findById(id);
     if (!election) {
       return res.status(404).json({
         success: false,
@@ -94,9 +238,46 @@ const getElectionById = async (req, res, next) => {
       });
     }
 
+    // Auto sync status if needed
+    if (election.status !== 'DRAFT' && election.status !== 'CANCELLED') {
+      const computed = computeStatusFromDates(election.startTime, election.endTime);
+      if (computed !== election.status) {
+        election.status = computed;
+        await election.save();
+      }
+    }
+
+    const isAdmin = req.user && req.user.role === 'ADMIN';
+    const isOwner = req.user && String(election.hostUserId) === String(req.user.id || req.user._id);
+
+    // Enforce visibility: PRIVATE elections are only accessible to Admin or Owner
+    if (election.visibility === 'PRIVATE' && !isAdmin && !isOwner) {
+      return res.status(403).json({
+        success: false,
+        error: 'Access denied. This is a private election.',
+      });
+    }
+
+    // Enforce DRAFT: DRAFT elections are only accessible to Admin or Owner
+    if (election.status === 'DRAFT' && !isAdmin && !isOwner) {
+      return res.status(403).json({
+        success: false,
+        error: 'Access denied. This election is still in draft mode.',
+      });
+    }
+
+    const candidates = await Candidate.find({ electionId: election._id });
+    const transactions = await BlockchainTransaction.find({ electionId: election._id })
+      .sort({ createdAt: -1 })
+      .limit(10);
+
+    const elObj = election.toObject();
+    elObj.candidates = candidates;
+    elObj.transactions = transactions;
+
     res.status(200).json({
       success: true,
-      data: election,
+      data: elObj,
     });
   } catch (error) {
     next(error);
@@ -108,15 +289,29 @@ const getElectionById = async (req, res, next) => {
  */
 const getActiveElection = async (req, res, next) => {
   try {
-    const election = await Election.findOne({
-      where: { status: 'ACTIVE' },
-      include: [
-        {
-          model: Candidate,
-          as: 'candidates',
-        },
-      ],
-    });
+    await autoSyncElectionStatuses();
+
+    const isAdmin = req.user && req.user.role === 'ADMIN';
+    const userId = req.user ? (req.user.id || req.user._id) : null;
+
+    const conditions = [{ status: 'ACTIVE' }];
+
+    if (!isAdmin) {
+      conditions.push({
+        $or: [
+          {
+            $or: [
+              { visibility: 'PUBLIC' },
+              { visibility: { $exists: false } },
+              { visibility: null },
+            ],
+          },
+          ...(userId ? [{ hostUserId: userId }] : []),
+        ],
+      });
+    }
+
+    const election = await Election.findOne({ $and: conditions }).sort({ startTime: -1 });
 
     if (!election) {
       return res.status(200).json({
@@ -126,9 +321,13 @@ const getActiveElection = async (req, res, next) => {
       });
     }
 
+    const candidates = await Candidate.find({ electionId: election._id });
+    const elObj = election.toObject();
+    elObj.candidates = candidates;
+
     res.status(200).json({
       success: true,
-      data: election,
+      data: elObj,
     });
   } catch (error) {
     next(error);
@@ -136,14 +335,14 @@ const getActiveElection = async (req, res, next) => {
 };
 
 /**
- * Update election details (Owner or Admin, only if not started)
+ * Update election details
  */
 const updateElection = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { title, description, startTime, endTime } = req.body;
+    const { title, description, startTime, endTime, type, organization, category, visibility, status } = req.body;
 
-    const election = await Election.findByPk(id);
+    const election = await Election.findById(id);
     if (!election) {
       return res.status(404).json({
         success: false,
@@ -151,30 +350,39 @@ const updateElection = async (req, res, next) => {
       });
     }
 
-    // Ownership check already handled by requireElectionOwner middleware
-
-    if (election.status !== 'DRAFT') {
+    if (election.status === 'ACTIVE' || election.status === 'ENDED') {
       return res.status(400).json({
         success: false,
         error: 'Cannot modify election that has already started or ended',
       });
     }
 
-    if (startTime && endTime) {
-      if (new Date(startTime) >= new Date(endTime)) {
-        return res.status(400).json({
-          success: false,
-          error: 'Start time must be before end time',
-        });
-      }
+    const newStart = startTime ? new Date(startTime) : election.startTime;
+    const newEnd = endTime ? new Date(endTime) : election.endTime;
+
+    if (newStart >= newEnd) {
+      return res.status(400).json({
+        success: false,
+        error: 'Start time must be before end time',
+      });
     }
 
-    await election.update({
-      title: title || election.title,
-      description: description !== undefined ? description : election.description,
-      startTime: startTime || election.startTime,
-      endTime: endTime || election.endTime,
-    });
+    if (title) election.title = title;
+    if (description !== undefined) election.description = description;
+    if (type !== undefined) election.type = type;
+    if (organization !== undefined) election.organization = organization;
+    if (category !== undefined) election.category = category;
+    if (visibility !== undefined) election.visibility = visibility;
+    if (startTime) election.startTime = newStart;
+    if (endTime) election.endTime = newEnd;
+
+    if (status !== undefined) {
+      election.status = status;
+    } else if (startTime || endTime) {
+      election.status = computeStatusFromDates(newStart, newEnd, election.status === 'DRAFT' ? 'DRAFT' : null);
+    }
+
+    await election.save();
 
     AuditService.logElection('ELECTION_UPDATED', election, req.user, req);
 
@@ -189,14 +397,12 @@ const updateElection = async (req, res, next) => {
 };
 
 /**
- * Start election (Owner or Admin)
+ * Start election
  */
 const startElection = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const election = await Election.findByPk(id, {
-      include: [{ model: Candidate, as: 'candidates' }],
-    });
+    const election = await Election.findById(id);
 
     if (!election) {
       return res.status(404).json({
@@ -204,8 +410,6 @@ const startElection = async (req, res, next) => {
         error: 'Election not found',
       });
     }
-
-    // Ownership check already handled by requireElectionOwner middleware
 
     if (election.status === 'ACTIVE') {
       return res.status(400).json({
@@ -221,7 +425,8 @@ const startElection = async (req, res, next) => {
       });
     }
 
-    if (election.candidates.length < 2) {
+    const candidates = await Candidate.find({ electionId: election._id });
+    if (candidates.length < 2) {
       return res.status(400).json({
         success: false,
         error: 'Election must have at least 2 candidates to start',
@@ -233,10 +438,13 @@ const startElection = async (req, res, next) => {
 
     AuditService.logElection('ELECTION_STARTED', election, req.user, req);
 
+    const elObj = election.toObject();
+    elObj.candidates = candidates;
+
     res.status(200).json({
       success: true,
       message: 'Election started successfully',
-      data: election,
+      data: elObj,
     });
   } catch (error) {
     next(error);
@@ -244,12 +452,12 @@ const startElection = async (req, res, next) => {
 };
 
 /**
- * End election (Owner or Admin)
+ * End election
  */
 const endElection = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const election = await Election.findByPk(id);
+    const election = await Election.findById(id);
 
     if (!election) {
       return res.status(404).json({
@@ -257,8 +465,6 @@ const endElection = async (req, res, next) => {
         error: 'Election not found',
       });
     }
-
-    // Ownership check already handled by requireElectionOwner middleware
 
     if (election.status !== 'ACTIVE') {
       return res.status(400).json({
@@ -283,12 +489,12 @@ const endElection = async (req, res, next) => {
 };
 
 /**
- * Delete election (Owner or Admin, only before active/with caution)
+ * Delete election
  */
 const deleteElection = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const election = await Election.findByPk(id);
+    const election = await Election.findById(id);
 
     if (!election) {
       return res.status(404).json({
@@ -306,7 +512,9 @@ const deleteElection = async (req, res, next) => {
 
     AuditService.logElection('ELECTION_DELETED', election, req.user, req);
 
-    await election.destroy();
+    await Candidate.deleteMany({ electionId: election._id });
+    await BlockchainTransaction.deleteMany({ electionId: election._id });
+    await Election.deleteOne({ _id: election._id });
 
     res.status(200).json({
       success: true,
@@ -323,9 +531,7 @@ const deleteElection = async (req, res, next) => {
 const getElectionResults = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const election = await Election.findByPk(id, {
-      include: [{ model: Candidate, as: 'candidates' }],
-    });
+    const election = await Election.findById(id);
 
     if (!election) {
       return res.status(404).json({
@@ -334,7 +540,8 @@ const getElectionResults = async (req, res, next) => {
       });
     }
 
-    // Attempt to fetch authoritative results from blockchain
+    const candidates = await Candidate.find({ electionId: election._id });
+
     let blockchainResults = null;
     let dataSource = 'blockchain';
 
@@ -348,12 +555,11 @@ const getElectionResults = async (req, res, next) => {
       dataSource = 'fallback_empty';
     }
 
-    // Format results
-    const candidateResults = election.candidates.map((cand, index) => {
+    const candidateResults = candidates.map((cand) => {
       let voteCount = 0;
       if (blockchainResults && blockchainResults.candidates) {
         const bcMatch = blockchainResults.candidates.find(
-          c => c.id === cand.blockchainCandidateId || c.name === cand.name
+          (c) => c.id === cand.blockchainCandidateId || c.name === cand.name
         );
         if (bcMatch) {
           voteCount = bcMatch.voteCount;
@@ -372,19 +578,17 @@ const getElectionResults = async (req, res, next) => {
 
     const totalVotes = candidateResults.reduce((sum, c) => sum + c.voteCount, 0);
 
-    // Calculate percentages and winner
-    const resultsWithPercentages = candidateResults.map(c => ({
+    const resultsWithPercentages = candidateResults.map((c) => ({
       ...c,
       percentage: totalVotes > 0 ? ((c.voteCount / totalVotes) * 100).toFixed(2) : 0,
     }));
 
-    // Find winner(s)
     let maxVotes = 0;
-    resultsWithPercentages.forEach(c => {
+    resultsWithPercentages.forEach((c) => {
       if (c.voteCount > maxVotes) maxVotes = c.voteCount;
     });
 
-    const winners = maxVotes > 0 ? resultsWithPercentages.filter(c => c.voteCount === maxVotes) : [];
+    const winners = maxVotes > 0 ? resultsWithPercentages.filter((c) => c.voteCount === maxVotes) : [];
     const isTie = winners.length > 1;
 
     res.status(200).json({

@@ -19,8 +19,12 @@ const CreateElection = () => {
   const [electionData, setElectionData] = useState({
     title: '',
     description: '',
+    type: '',
+    organization: '',
+    category: '',
     startTime: '',
     endTime: '',
+    visibility: 'PUBLIC',
   });
 
   const [candidates, setCandidates] = useState([
@@ -178,6 +182,47 @@ const CreateElection = () => {
               />
             </div>
 
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Election Type
+                </label>
+                <Input
+                  type="text"
+                  name="type"
+                  value={electionData.type}
+                  onChange={handleElectionChange}
+                  placeholder="e.g., General, Primary, Referendum"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Organization
+                </label>
+                <Input
+                  type="text"
+                  name="organization"
+                  value={electionData.organization}
+                  onChange={handleElectionChange}
+                  placeholder="e.g., University Student Union"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Category
+                </label>
+                <Input
+                  type="text"
+                  name="category"
+                  value={electionData.category}
+                  onChange={handleElectionChange}
+                  placeholder="e.g., Governance, Academic, Club"
+                />
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
@@ -204,6 +249,21 @@ const CreateElection = () => {
                   required
                 />
               </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Election Visibility <span className="text-red-400">*</span>
+              </label>
+              <select
+                name="visibility"
+                value={electionData.visibility}
+                onChange={handleElectionChange}
+                className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+              >
+                <option value="PUBLIC">PUBLIC (Discoverable and open to all eligible voters)</option>
+                <option value="PRIVATE">PRIVATE (Restricted access)</option>
+              </select>
             </div>
 
             <div className="flex justify-end space-x-3 pt-4">

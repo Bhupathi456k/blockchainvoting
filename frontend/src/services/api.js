@@ -43,11 +43,28 @@ export const authAPI = {
   getMe: () => api.get('/auth/me'),
   updateWallet: (data) => api.patch('/auth/wallet', data),
   logout: () => api.post('/auth/logout'),
+  generateVoterId: () => api.get('/auth/generate-voter-id'),
+};
+
+// WebAuthn API (Biometric Authentication)
+export const webauthnAPI = {
+  // Registration
+  getRegistrationOptions: () => api.post('/auth/webauthn/register/options'),
+  verifyRegistration: (data) => api.post('/auth/webauthn/register/verify', data),
+  // Authentication
+  getAuthenticationOptions: (userId) => api.post('/auth/webauthn/authenticate/options', { userId }),
+  verifyAuthentication: (userId, credential) => api.post('/auth/webauthn/authenticate/verify', { userId, credential }),
+  // Credential Management
+  listCredentials: () => api.get('/auth/webauthn/credentials'),
+  renameCredential: (id, deviceName) => api.patch(`/auth/webauthn/credentials/${id}`, { deviceName }),
+  removeCredential: (id) => api.delete(`/auth/webauthn/credentials/${id}`),
+  hasCredentials: (userId) => api.get(`/auth/webauthn/credentials/check/${userId}`),
 };
 
 // Elections API
 export const electionsAPI = {
-  getAll: () => api.get('/elections'),
+  getAll: (params = {}) => api.get('/elections', { params }),
+  getElections: (params = {}) => api.get('/elections', { params }),
   getActive: () => api.get('/elections/active'),
   getById: (id) => api.get(`/elections/${id}`),
   create: (data) => api.post('/elections', data),

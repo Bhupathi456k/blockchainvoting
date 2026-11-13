@@ -1,64 +1,42 @@
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/database');
+const mongoose = require('mongoose');
 
-const BlockchainTransaction = sequelize.define('BlockchainTransaction', {
-  id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    autoIncrement: true,
-  },
-  electionId: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    references: {
-      model: 'elections',
-      key: 'id',
+const blockchainTransactionSchema = new mongoose.Schema(
+  {
+    electionId: { type: mongoose.Schema.Types.ObjectId, ref: 'Election', required: true, index: true },
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null, index: true },
+    transactionHash: { type: String, required: true, unique: true, index: true },
+    blockNumber: { type: Number, default: null },
+    transactionType: {
+      type: String,
+      enum: ['VOTE', 'ELECTION_CREATE', 'CANDIDATE_ADD', 'VOTER_AUTHORIZE', 'ELECTION_START', 'ELECTION_END'],
+      required: true,
+      index: true,
     },
-  },
-  userId: {
-    type: DataTypes.INTEGER,
-    allowNull: true,
-    references: {
-      model: 'users',
-      key: 'id',
+    status: {
+      type: String,
+      enum: ['PENDING', 'CONFIRMED', 'FAILED'],
+      default: 'PENDING',
+      required: true,
+      index: true,
     },
+    gasUsed: { type: String, default: null },
+    metadata: { type: mongoose.Schema.Types.Mixed, default: null },
   },
-  transactionHash: {
-    type: DataTypes.STRING(66),
-    allowNull: false,
-    unique: true,
-  },
-  blockNumber: {
-    type: DataTypes.INTEGER,
-    allowNull: true,
-  },
-  transactionType: {
-    type: DataTypes.ENUM('VOTE', 'ELECTION_CREATE', 'CANDIDATE_ADD', 'VOTER_AUTHORIZE', 'ELECTION_START', 'ELECTION_END'),
-    allowNull: false,
-  },
-  status: {
-    type: DataTypes.ENUM('PENDING', 'CONFIRMED', 'FAILED'),
-    defaultValue: 'PENDING',
-    allowNull: false,
-  },
-  gasUsed: {
-    type: DataTypes.STRING(50),
-    allowNull: true,
-  },
-  metadata: {
-    type: DataTypes.JSON,
-    allowNull: true,
-  },
-}, {
-  tableName: 'blockchain_transactions',
-  timestamps: true,
-  indexes: [
-    { fields: ['transactionHash'] },
-    { fields: ['electionId'] },
-    { fields: ['userId'] },
-    { fields: ['transactionType'] },
-    { fields: ['status'] },
-  ],
+  {
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
+  }
+);
+
+blockchainTransactionSchema.virtual('id').get(function () {
+  return this._id.toHexString();
 });
 
+blockchainTransactionSchema.statics.findByPk = function (id) {
+  if (!id) return null;
+  return this.findById(id);
+};
+
+const BlockchainTransaction = mongoose.model('BlockchainTransaction', blockchainTransactionSchema);
 module.exports = BlockchainTransaction;

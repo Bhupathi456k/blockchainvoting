@@ -9,7 +9,7 @@ const createCandidate = async (req, res, next) => {
     const { electionId } = req.params;
     const { name, party, description, imageUrl } = req.body;
 
-    const election = await Election.findByPk(electionId);
+    const election = await Election.findById(electionId);
     if (!election) {
       return res.status(404).json({
         success: false,
@@ -17,12 +17,10 @@ const createCandidate = async (req, res, next) => {
       });
     }
 
-    // Ownership check already handled by requireElectionOwner middleware
-
-    if (election.status !== 'DRAFT') {
+    if (election.status === 'ACTIVE' || election.status === 'ENDED') {
       return res.status(400).json({
         success: false,
-        error: 'Cannot add candidates to an election that has already started',
+        error: 'Cannot add candidates to an election that has already started or ended',
       });
     }
 
@@ -53,7 +51,7 @@ const getCandidatesByElection = async (req, res, next) => {
   try {
     const { electionId } = req.params;
 
-    const election = await Election.findByPk(electionId);
+    const election = await Election.findById(electionId);
     if (!election) {
       return res.status(404).json({
         success: false,
@@ -61,10 +59,7 @@ const getCandidatesByElection = async (req, res, next) => {
       });
     }
 
-    const candidates = await Candidate.findAll({
-      where: { electionId },
-      order: [['id', 'ASC']],
-    });
+    const candidates = await Candidate.find({ electionId }).sort({ createdAt: 1 });
 
     res.status(200).json({
       success: true,
@@ -82,10 +77,7 @@ const getCandidateById = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    const candidate = await Candidate.findByPk(id, {
-      include: [{ model: Election, as: 'election' }],
-    });
-
+    const candidate = await Candidate.findById(id);
     if (!candidate) {
       return res.status(404).json({
         success: false,
@@ -93,9 +85,13 @@ const getCandidateById = async (req, res, next) => {
       });
     }
 
+    const election = await Election.findById(candidate.electionId);
+    const candObj = candidate.toObject();
+    candObj.election = election;
+
     res.status(200).json({
       success: true,
-      data: candidate,
+      data: candObj,
     });
   } catch (error) {
     next(error);
@@ -103,17 +99,14 @@ const getCandidateById = async (req, res, next) => {
 };
 
 /**
- * Update candidate (Owner or Admin, only before election starts)
+ * Update candidate
  */
 const updateCandidate = async (req, res, next) => {
   try {
     const { id } = req.params;
     const { name, party, description, imageUrl } = req.body;
 
-    const candidate = await Candidate.findByPk(id, {
-      include: [{ model: Election, as: 'election' }],
-    });
-
+    const candidate = await Candidate.findById(id);
     if (!candidate) {
       return res.status(404).json({
         success: false,
@@ -121,27 +114,34 @@ const updateCandidate = async (req, res, next) => {
       });
     }
 
-    // Check ownership: must be admin or election owner
-    if (req.user.role !== 'ADMIN' && candidate.election.hostUserId !== req.user.id) {
+    const election = await Election.findById(candidate.electionId);
+    if (!election) {
+      return res.status(404).json({
+        success: false,
+        error: 'Associated election not found',
+      });
+    }
+
+    if (req.user.role !== 'ADMIN' && String(election.hostUserId) !== String(req.user.id)) {
       return res.status(403).json({
         success: false,
         error: 'You do not have permission to modify this candidate',
       });
     }
 
-    if (candidate.election.status !== 'DRAFT') {
+    if (election.status === 'ACTIVE' || election.status === 'ENDED') {
       return res.status(400).json({
         success: false,
-        error: 'Cannot modify candidates after election has started',
+        error: 'Cannot modify candidates after election has started or ended',
       });
     }
 
-    await candidate.update({
-      name: name || candidate.name,
-      party: party !== undefined ? party : candidate.party,
-      description: description !== undefined ? description : candidate.description,
-      imageUrl: imageUrl !== undefined ? imageUrl : candidate.imageUrl,
-    });
+    if (name) candidate.name = name;
+    if (party !== undefined) candidate.party = party;
+    if (description !== undefined) candidate.description = description;
+    if (imageUrl !== undefined) candidate.imageUrl = imageUrl;
+
+    await candidate.save();
 
     AuditService.logCandidate('CANDIDATE_UPDATED', candidate, req.user, req);
 
@@ -156,16 +156,13 @@ const updateCandidate = async (req, res, next) => {
 };
 
 /**
- * Delete candidate (Owner or Admin, only before election starts)
+ * Delete candidate
  */
 const deleteCandidate = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    const candidate = await Candidate.findByPk(id, {
-      include: [{ model: Election, as: 'election' }],
-    });
-
+    const candidate = await Candidate.findById(id);
     if (!candidate) {
       return res.status(404).json({
         success: false,
@@ -173,24 +170,31 @@ const deleteCandidate = async (req, res, next) => {
       });
     }
 
-    // Check ownership: must be admin or election owner
-    if (req.user.role !== 'ADMIN' && candidate.election.hostUserId !== req.user.id) {
+    const election = await Election.findById(candidate.electionId);
+    if (!election) {
+      return res.status(404).json({
+        success: false,
+        error: 'Associated election not found',
+      });
+    }
+
+    if (req.user.role !== 'ADMIN' && String(election.hostUserId) !== String(req.user.id)) {
       return res.status(403).json({
         success: false,
         error: 'You do not have permission to delete this candidate',
       });
     }
 
-    if (candidate.election.status !== 'DRAFT') {
+    if (election.status === 'ACTIVE' || election.status === 'ENDED') {
       return res.status(400).json({
         success: false,
-        error: 'Cannot delete candidates after election has started',
+        error: 'Cannot delete candidates after election has started or ended',
       });
     }
 
     AuditService.logCandidate('CANDIDATE_DELETED', candidate, req.user, req);
 
-    await candidate.destroy();
+    await Candidate.deleteOne({ _id: candidate._id });
 
     res.status(200).json({
       success: true,

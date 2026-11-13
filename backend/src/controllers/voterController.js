@@ -7,11 +7,9 @@ const AuditService = require('../services/auditService');
  */
 const getVoters = async (req, res, next) => {
   try {
-    const voters = await User.findAll({
-      where: { role: 'VOTER' },
-      attributes: { exclude: ['passwordHash'] },
-      order: [['createdAt', 'DESC']],
-    });
+    const voters = await User.find({ role: 'VOTER' })
+      .select('-passwordHash')
+      .sort({ createdAt: -1 });
 
     res.status(200).json({
       success: true,
@@ -29,18 +27,7 @@ const getVoterById = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    const voter = await User.findOne({
-      where: { id, role: 'VOTER' },
-      attributes: { exclude: ['passwordHash'] },
-      include: [
-        {
-          model: BlockchainTransaction,
-          as: 'transactions',
-          limit: 5,
-          order: [['createdAt', 'DESC']],
-        },
-      ],
-    });
+    const voter = await User.findOne({ _id: id, role: 'VOTER' }).select('-passwordHash');
 
     if (!voter) {
       return res.status(404).json({
@@ -49,9 +36,16 @@ const getVoterById = async (req, res, next) => {
       });
     }
 
+    const transactions = await BlockchainTransaction.find({ userId: voter._id })
+      .sort({ createdAt: -1 })
+      .limit(5);
+
+    const voterObj = voter.toObject();
+    voterObj.transactions = transactions;
+
     res.status(200).json({
       success: true,
-      data: voter,
+      data: voterObj,
     });
   } catch (error) {
     next(error);
@@ -66,9 +60,7 @@ const updateVoterEligibility = async (req, res, next) => {
     const { id } = req.params;
     const { isEligible } = req.body;
 
-    const voter = await User.findOne({
-      where: { id, role: 'VOTER' },
-    });
+    const voter = await User.findOne({ _id: id, role: 'VOTER' });
 
     if (!voter) {
       return res.status(404).json({
@@ -105,9 +97,7 @@ const authorizeVoterOnChain = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    const voter = await User.findOne({
-      where: { id, role: 'VOTER' },
-    });
+    const voter = await User.findOne({ _id: id, role: 'VOTER' });
 
     if (!voter) {
       return res.status(404).json({
@@ -157,12 +147,10 @@ const authorizeVoterOnChain = async (req, res, next) => {
  */
 const batchAuthorizeVotersOnChain = async (req, res, next) => {
   try {
-    const eligibleVoters = await User.findAll({
-      where: {
-        role: 'VOTER',
-        isEligible: true,
-        walletAddress: { [require('sequelize').Op.ne]: null },
-      },
+    const eligibleVoters = await User.find({
+      role: 'VOTER',
+      isEligible: true,
+      walletAddress: { $ne: null },
     });
 
     if (eligibleVoters.length === 0) {
@@ -206,14 +194,12 @@ const batchAuthorizeVotersOnChain = async (req, res, next) => {
  */
 const getVoterStats = async (req, res, next) => {
   try {
-    const totalVoters = await User.count({ where: { role: 'VOTER' } });
-    const eligibleVoters = await User.count({ where: { role: 'VOTER', isEligible: true } });
-    const votedCount = await User.count({ where: { role: 'VOTER', hasVoted: true } });
-    const withWallet = await User.count({
-      where: {
-        role: 'VOTER',
-        walletAddress: { [require('sequelize').Op.ne]: null },
-      },
+    const totalVoters = await User.countDocuments({ role: 'VOTER' });
+    const eligibleVoters = await User.countDocuments({ role: 'VOTER', isEligible: true });
+    const votedCount = await User.countDocuments({ role: 'VOTER', hasVoted: true });
+    const withWallet = await User.countDocuments({
+      role: 'VOTER',
+      walletAddress: { $ne: null },
     });
 
     res.status(200).json({

@@ -1,57 +1,47 @@
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/database');
+const mongoose = require('mongoose');
 
-const Election = sequelize.define('Election', {
-  id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    autoIncrement: true,
-  },
-  hostUserId: {
-    type: DataTypes.INTEGER,
-    allowNull: true,
-    references: {
-      model: 'users',
-      key: 'id',
+const electionSchema = new mongoose.Schema(
+  {
+    hostUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    title: { type: String, required: true },
+    description: { type: String, default: null },
+    startTime: { type: Date, required: true, index: true },
+    endTime: { type: Date, required: true, index: true },
+    status: {
+      type: String,
+      enum: ['DRAFT', 'UPCOMING', 'ACTIVE', 'ENDED', 'CANCELLED'],
+      default: 'UPCOMING',
+      required: true,
+      index: true,
     },
+    visibility: {
+      type: String,
+      enum: ['PUBLIC', 'PRIVATE'],
+      default: 'PUBLIC',
+      required: true,
+      index: true,
+    },
+    contractElectionId: { type: Number, default: null },
+    type: { type: String, default: null, index: true },
+    organization: { type: String, default: null },
+    category: { type: String, default: null, index: true },
+    isDeployedToBlockchain: { type: Boolean, default: false },
   },
-  title: {
-    type: DataTypes.STRING(255),
-    allowNull: false,
-  },
-  description: {
-    type: DataTypes.TEXT,
-    allowNull: true,
-  },
-  startTime: {
-    type: DataTypes.DATE,
-    allowNull: false,
-  },
-  endTime: {
-    type: DataTypes.DATE,
-    allowNull: false,
-  },
-  status: {
-    type: DataTypes.ENUM('DRAFT', 'UPCOMING', 'ACTIVE', 'ENDED'),
-    defaultValue: 'DRAFT',
-    allowNull: false,
-  },
-  contractElectionId: {
-    type: DataTypes.INTEGER,
-    allowNull: true,
-  },
-  isDeployedToBlockchain: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: false,
-  },
-}, {
-  tableName: 'elections',
-  timestamps: true,
-  indexes: [
-    { fields: ['status'] },
-    { fields: ['startTime'] },
-    { fields: ['endTime'] },
-  ],
+  {
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
+  }
+);
+
+electionSchema.virtual('id').get(function () {
+  return this._id.toHexString();
 });
 
+electionSchema.statics.findByPk = function (id) {
+  if (!id) return null;
+  return this.findById(id);
+};
+
+const Election = mongoose.model('Election', electionSchema);
 module.exports = Election;

@@ -26,8 +26,10 @@ class BlockchainService {
    */
   async initialize() {
     try {
-      // Connect to local Ethereum RPC
-      this.provider = new ethers.JsonRpcProvider(config.blockchain.rpcUrl);
+      // Connect to local Ethereum RPC with fallback handling
+      this.provider = new ethers.JsonRpcProvider(config.blockchain.rpcUrl, undefined, {
+        staticNetwork: ethers.Network.from(31337), // Local Hardhat chainId fallback
+      });
 
       // Load contract ABI
       const artifactPath = path.resolve(__dirname, '../../../blockchain/artifacts/contracts/Voting.sol/Voting.json');

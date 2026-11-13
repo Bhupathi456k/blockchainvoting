@@ -19,7 +19,7 @@ class AuditService {
       const entry = await AuditLog.create({
         action,
         category,
-        userId,
+        userId: userId ? String(userId) : null,
         performedBy,
         targetType,
         targetId: targetId ? String(targetId) : null,
@@ -39,15 +39,15 @@ class AuditService {
    */
   static getIp(req) {
     if (!req) return null;
-    return req.headers['x-forwarded-for'] || req.socket?.remoteAddress || req.ip || null;
+    return req.headers ? (req.headers['x-forwarded-for'] || req.socket?.remoteAddress || req.ip || null) : null;
   }
 
   /**
-   * Log authentication actions (login, register, failed login, logout)
+   * Log authentication actions
    */
   static async logAuth(action, user, req, details = {}, status = 'SUCCESS') {
     const performedBy = user ? (user.email || user.voterId || user.name) : (req?.body?.identifier || 'Anonymous');
-    const userId = user ? user.id : null;
+    const userId = user ? (user._id || user.id) : null;
     return this.logEvent({
       action,
       category: 'AUTH',
@@ -65,17 +65,17 @@ class AuditService {
   }
 
   /**
-   * Log Election actions (create, update, start, end, delete)
+   * Log Election actions
    */
   static async logElection(action, election, user, req, details = {}) {
     const performedBy = user ? (user.email || user.name) : 'SYSTEM';
     return this.logEvent({
       action,
       category: 'ELECTION',
-      userId: user ? user.id : null,
+      userId: user ? (user._id || user.id) : null,
       performedBy,
       targetType: 'Election',
-      targetId: election?.id,
+      targetId: election?.id || election?._id,
       details: {
         electionTitle: election?.title,
         status: election?.status,
@@ -87,17 +87,17 @@ class AuditService {
   }
 
   /**
-   * Log Host Request actions (submitted, approved, rejected)
+   * Log Host Request actions
    */
   static async logHostRequest(action, hostRequest, reviewerUser, req, details = {}) {
     const performedBy = reviewerUser ? (reviewerUser.email || reviewerUser.name) : 'User';
     return this.logEvent({
       action,
       category: 'HOST_REQUEST',
-      userId: reviewerUser ? reviewerUser.id : (hostRequest?.userId || null),
+      userId: reviewerUser ? (reviewerUser._id || reviewerUser.id) : (hostRequest?.userId || null),
       performedBy,
       targetType: 'ElectionHostRequest',
-      targetId: hostRequest?.id,
+      targetId: hostRequest?.id || hostRequest?._id,
       details: {
         electionTitle: hostRequest?.electionTitle,
         requestStatus: hostRequest?.status,
@@ -110,17 +110,17 @@ class AuditService {
   }
 
   /**
-   * Log Candidate actions (created, updated, deleted)
+   * Log Candidate actions
    */
   static async logCandidate(action, candidate, user, req, details = {}) {
     const performedBy = user ? (user.email || user.name) : 'SYSTEM';
     return this.logEvent({
       action,
       category: 'CANDIDATE',
-      userId: user ? user.id : null,
+      userId: user ? (user._id || user.id) : null,
       performedBy,
       targetType: 'Candidate',
-      targetId: candidate?.id,
+      targetId: candidate?.id || candidate?._id,
       details: {
         candidateName: candidate?.name,
         party: candidate?.party,
@@ -133,17 +133,17 @@ class AuditService {
   }
 
   /**
-   * Log Voter status modifications (eligibility toggle, on-chain authorization)
+   * Log Voter status modifications
    */
   static async logVoter(action, voterUser, adminUser, req, details = {}) {
     const performedBy = adminUser ? (adminUser.email || adminUser.name) : 'ADMIN';
     return this.logEvent({
       action,
       category: 'VOTER',
-      userId: adminUser ? adminUser.id : null,
+      userId: adminUser ? (adminUser._id || adminUser.id) : null,
       performedBy,
       targetType: 'User',
-      targetId: voterUser?.id,
+      targetId: voterUser?.id || voterUser?._id,
       details: {
         voterEmail: voterUser?.email,
         voterId: voterUser?.voterId,
@@ -155,14 +155,14 @@ class AuditService {
   }
 
   /**
-   * Log blockchain operations (vote cast, transaction verification)
+   * Log blockchain operations
    */
   static async logBlockchain(action, txHash, user, req, details = {}) {
     const performedBy = user ? (user.email || user.name) : 'Voter';
     return this.logEvent({
       action,
       category: 'BLOCKCHAIN',
-      userId: user ? user.id : null,
+      userId: user ? (user._id || user.id) : null,
       performedBy,
       targetType: 'BlockchainTransaction',
       targetId: txHash,

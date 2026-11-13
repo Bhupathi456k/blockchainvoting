@@ -1,10 +1,21 @@
 const express = require('express');
 const { body } = require('express-validator');
 const authController = require('../controllers/authController');
+const webauthnRoutes = require('./webauthnRoutes');
 const { authenticate } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 
 const router = express.Router();
+
+// Mount WebAuthn sub-routes: /api/auth/webauthn/*
+router.use('/webauthn', webauthnRoutes);
+
+/**
+ * @route   GET /api/auth/generate-voter-id
+ * @desc    Generate a guaranteed unique Voter ID
+ * @access  Public
+ */
+router.get('/generate-voter-id', authController.getGeneratedVoterId);
 
 /**
  * @route   POST /api/auth/register
@@ -15,9 +26,8 @@ router.post(
   '/register',
   [
     body('voterId')
+      .optional({ checkFalsy: true })
       .trim()
-      .notEmpty()
-      .withMessage('Voter ID is required')
       .isLength({ min: 3, max: 50 })
       .withMessage('Voter ID must be between 3 and 50 characters'),
     body('name')
@@ -34,7 +44,7 @@ router.post(
       .withMessage('Must be a valid email address')
       .normalizeEmail(),
     body('phone')
-      .optional()
+      .optional({ checkFalsy: true })
       .trim()
       .matches(/^[0-9+\-\s()]+$/)
       .withMessage('Invalid phone number format'),
@@ -42,11 +52,9 @@ router.post(
       .notEmpty()
       .withMessage('Password is required')
       .isLength({ min: 6 })
-      .withMessage('Password must be at least 6 characters long')
-      .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
-      .withMessage('Password must contain at least one uppercase letter, one lowercase letter, and one number'),
+      .withMessage('Password must be at least 6 characters long'),
     body('walletAddress')
-      .optional()
+      .optional({ checkFalsy: true })
       .matches(/^0x[a-fA-F0-9]{40}$/)
       .withMessage('Invalid Ethereum wallet address'),
   ],

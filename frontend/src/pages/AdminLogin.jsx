@@ -1,20 +1,22 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-import { Shield, KeyRound, Lock, AlertCircle, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { useAuth, LOGIN_STATES } from '../context/AuthContext';
+import { Shield, KeyRound, Lock, AlertCircle, ArrowLeft, CheckCircle2, ShieldCheck } from 'lucide-react';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import Card from '../components/ui/Card';
+import BiometricPrompt from '../components/BiometricPrompt';
 
 const AdminLogin = () => {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, loginState, cancelBiometric } = useAuth();
   const [formData, setFormData] = useState({
     identifier: '',
     password: '',
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [pendingAdmin, setPendingAdmin] = useState(null);
 
   const handleChange = (e) => {
     setFormData({
@@ -39,16 +41,30 @@ const AdminLogin = () => {
 
     try {
       const user = await login(formData.identifier, formData.password);
-      if (user.role === 'ADMIN') {
+      if (user?.role === 'ADMIN') {
         navigate('/admin');
       } else {
         navigate('/dashboard');
       }
+
     } catch (err) {
       setError(err.response?.data?.error || err.message || 'Invalid administrator credentials');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleBiometricSuccess = (authenticatedUser) => {
+    if (authenticatedUser.role === 'ADMIN') {
+      navigate('/admin');
+    } else {
+      navigate('/dashboard');
+    }
+  };
+
+  const handleCancelBiometric = () => {
+    cancelBiometric();
+    setPendingAdmin(null);
   };
 
   return (
@@ -70,7 +86,7 @@ const AdminLogin = () => {
             System Administrator
           </h2>
           <p className="mt-2 text-sm text-slate-400">
-            Sign in with authorized administrator credentials to manage platform governance, elections, and audit logs.
+            Sign in with authorized administrator credentials.
           </p>
         </div>
 
@@ -158,11 +174,17 @@ const AdminLogin = () => {
               ) : (
                 <>
                   <Lock className="w-4 h-4" />
-                  <span>Authenticate Administrator</span>
+                  <span>Sign In to Admin Portal</span>
                 </>
               )}
             </Button>
           </form>
+
+          {/* Direct Auth Notice */}
+          <div className="mt-6 p-3 bg-slate-950/60 rounded-xl border border-emerald-900/30 flex items-center gap-2.5 text-xs text-slate-400">
+            <ShieldCheck className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+            <span>Direct Admin Sign-In Enabled (No 2-Step Verification)</span>
+          </div>
 
           {/* Security Notice */}
           <div className="mt-6 pt-6 border-t border-slate-800/80 text-center">

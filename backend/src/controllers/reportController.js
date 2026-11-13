@@ -6,33 +6,31 @@ const blockchainService = require('../services/blockchainService');
  */
 const getSystemSummary = async (req, res, next) => {
   try {
-    const totalUsers = await User.count();
-    const totalVoters = await User.count({ where: { role: 'VOTER' } });
-    const eligibleVoters = await User.count({ where: { role: 'VOTER', isEligible: true } });
-    const activeVoters = await User.count({ where: { hasVoted: true } });
+    const totalUsers = await User.countDocuments();
+    const totalVoters = await User.countDocuments({ role: 'VOTER' });
+    const eligibleVoters = await User.countDocuments({ role: 'VOTER', isEligible: true });
+    const activeVoters = await User.countDocuments({ hasVoted: true });
 
-    const totalElections = await Election.count();
-    const draftElections = await Election.count({ where: { status: 'DRAFT' } });
-    const activeElections = await Election.count({ where: { status: 'ACTIVE' } });
-    const endedElections = await Election.count({ where: { status: 'ENDED' } });
+    const totalElections = await Election.countDocuments();
+    const draftElections = await Election.countDocuments({ status: 'DRAFT' });
+    const activeElections = await Election.countDocuments({ status: 'ACTIVE' });
+    const endedElections = await Election.countDocuments({ status: 'ENDED' });
 
-    const totalCandidates = await Candidate.count();
-    const totalTransactions = await BlockchainTransaction.count();
-    const confirmedTransactions = await BlockchainTransaction.count({ where: { status: 'CONFIRMED' } });
+    const totalCandidates = await Candidate.countDocuments();
+    const totalTransactions = await BlockchainTransaction.countDocuments();
+    const confirmedTransactions = await BlockchainTransaction.countDocuments({ status: 'CONFIRMED' });
 
-    const totalHostRequests = await ElectionHostRequest.count();
-    const pendingHostRequests = await ElectionHostRequest.count({ where: { status: 'PENDING' } });
-    const approvedHostRequests = await ElectionHostRequest.count({ where: { status: 'APPROVED' } });
-    const rejectedHostRequests = await ElectionHostRequest.count({ where: { status: 'REJECTED' } });
+    const totalHostRequests = await ElectionHostRequest.countDocuments();
+    const pendingHostRequests = await ElectionHostRequest.countDocuments({ status: 'PENDING' });
+    const approvedHostRequests = await ElectionHostRequest.countDocuments({ status: 'APPROVED' });
+    const rejectedHostRequests = await ElectionHostRequest.countDocuments({ status: 'REJECTED' });
 
-    // Blockchain status
     let blockchainStatus = {
       connected: blockchainService.isConnected,
       contractAddress: blockchainService.contractAddress || null,
       provider: blockchainService.provider ? 'Connected' : 'Offline',
     };
 
-    // Calculate voter participation rate
     const voterTurnoutRate = eligibleVoters > 0 ? ((activeVoters / eligibleVoters) * 100).toFixed(1) : 0;
 
     res.status(200).json({
@@ -76,59 +74,57 @@ const getSystemSummary = async (req, res, next) => {
  */
 const getElectionReports = async (req, res, next) => {
   try {
-    const elections = await Election.findAll({
-      include: [
-        { model: Candidate, as: 'candidates' },
-        { model: User, as: 'host', attributes: ['id', 'name', 'email'] },
-      ],
-      order: [['createdAt', 'DESC']],
-    });
+    const rawElections = await Election.find({}).sort({ createdAt: -1 });
+    const eligibleVotersCount = await User.countDocuments({ isEligible: true, role: 'VOTER' });
 
-    const eligibleVotersCount = await User.count({ where: { isEligible: true, role: 'VOTER' } });
+    const reports = await Promise.all(
+      rawElections.map(async (election) => {
+        const candidates = await Candidate.find({ electionId: election._id });
+        const host = election.hostUserId ? await User.findById(election.hostUserId).select('id name email') : null;
 
-    const reports = elections.map((election) => {
-      const candidates = election.candidates || [];
-      const totalVotes = candidates.reduce((sum, c) => sum + (c.voteCount || 0), 0);
+        const totalVotes = candidates.reduce((sum, c) => sum + (c.voteCount || 0), 0);
 
-      let leadingCandidate = null;
-      if (candidates.length > 0) {
-        const sorted = [...candidates].sort((a, b) => (b.voteCount || 0) - (a.voteCount || 0));
-        leadingCandidate = sorted[0];
-      }
+        let leadingCandidate = null;
+        if (candidates.length > 0) {
+          const sorted = [...candidates].sort((a, b) => (b.voteCount || 0) - (a.voteCount || 0));
+          leadingCandidate = sorted[0];
+        }
 
-      const turnoutPercent = eligibleVotersCount > 0
-        ? ((totalVotes / eligibleVotersCount) * 100).toFixed(2)
-        : '0.00';
+        const turnoutPercent =
+          eligibleVotersCount > 0 ? ((totalVotes / eligibleVotersCount) * 100).toFixed(2) : '0.00';
 
-      return {
-        id: election.id,
-        title: election.title,
-        status: election.status,
-        hostName: election.host ? election.host.name : 'System Admin',
-        startTime: election.startTime,
-        endTime: election.endTime,
-        candidateCount: candidates.length,
-        totalVotes,
-        turnoutPercent: `${turnoutPercent}%`,
-        leadingCandidate: leadingCandidate ? {
-          name: leadingCandidate.name,
-          party: leadingCandidate.party,
-          voteCount: leadingCandidate.voteCount,
-        } : null,
-        candidates: candidates.map((c) => ({
-          id: c.id,
-          name: c.name,
-          party: c.party,
-          voteCount: c.voteCount,
-          percentage: totalVotes > 0 ? (((c.voteCount || 0) / totalVotes) * 100).toFixed(1) + '%' : '0%',
-        })),
-      };
-    });
+        return {
+          id: election.id,
+          title: election.title,
+          status: election.status,
+          hostName: host ? host.name : 'System Admin',
+          startTime: election.startTime,
+          endTime: election.endTime,
+          candidateCount: candidates.length,
+          totalVotes,
+          turnoutPercent: `${turnoutPercent}%`,
+          leadingCandidate: leadingCandidate
+            ? {
+                name: leadingCandidate.name,
+                party: leadingCandidate.party,
+                voteCount: leadingCandidate.voteCount,
+              }
+            : null,
+          candidates: candidates.map((c) => ({
+            id: c.id,
+            name: c.name,
+            party: c.party,
+            voteCount: c.voteCount,
+            percentage: totalVotes > 0 ? (((c.voteCount || 0) / totalVotes) * 100).toFixed(1) + '%' : '0%',
+          })),
+        };
+      })
+    );
 
     res.status(200).json({
       success: true,
       data: {
-        totalElections: elections.length,
+        totalElections: rawElections.length,
         eligibleVotersCount,
         reports,
       },
@@ -146,13 +142,17 @@ const exportReport = async (req, res, next) => {
     const { type = 'elections', format = 'json' } = req.query;
 
     if (type === 'elections') {
-      const elections = await Election.findAll({
-        include: [
-          { model: Candidate, as: 'candidates' },
-          { model: User, as: 'host', attributes: ['name', 'email'] },
-        ],
-        order: [['createdAt', 'DESC']],
-      });
+      const rawElections = await Election.find({}).sort({ createdAt: -1 });
+      const elections = await Promise.all(
+        rawElections.map(async (e) => {
+          const candidates = await Candidate.find({ electionId: e._id });
+          const host = e.hostUserId ? await User.findById(e.hostUserId).select('name email') : null;
+          const eObj = e.toObject();
+          eObj.candidates = candidates;
+          eObj.host = host;
+          return eObj;
+        })
+      );
 
       if (format === 'csv') {
         const header = 'Election ID,Title,Status,Host Name,Candidates Count,Total Votes,Start Time,End Time\n';
@@ -179,25 +179,26 @@ const exportReport = async (req, res, next) => {
     }
 
     if (type === 'voters') {
-      const voters = await User.findAll({
-        attributes: ['id', 'voterId', 'name', 'email', 'phone', 'role', 'hostPermissionStatus', 'isEligible', 'hasVoted', 'createdAt'],
-        order: [['createdAt', 'DESC']],
-      });
+      const voters = await User.find({})
+        .select('id voterId name email phone role hostPermissionStatus isEligible hasVoted createdAt')
+        .sort({ createdAt: -1 });
 
       if (format === 'csv') {
         const header = 'ID,Voter ID,Name,Email,Phone,Role,Host Status,Eligible,Has Voted,Registered Date\n';
-        const rows = voters.map((v) => [
-          v.id,
-          `"${v.voterId}"`,
-          `"${(v.name || '').replace(/"/g, '""')}"`,
-          `"${v.email}"`,
-          `"${v.phone || ''}"`,
-          `"${v.role}"`,
-          `"${v.hostPermissionStatus}"`,
-          v.isEligible ? 'YES' : 'NO',
-          v.hasVoted ? 'YES' : 'NO',
-          `"${v.createdAt.toISOString()}"`,
-        ].join(','));
+        const rows = voters.map((v) =>
+          [
+            v.id,
+            `"${v.voterId}"`,
+            `"${(v.name || '').replace(/"/g, '""')}"`,
+            `"${v.email}"`,
+            `"${v.phone || ''}"`,
+            `"${v.role}"`,
+            `"${v.hostPermissionStatus}"`,
+            v.isEligible ? 'YES' : 'NO',
+            v.hasVoted ? 'YES' : 'NO',
+            `"${new Date(v.createdAt).toISOString()}"`,
+          ].join(',')
+        );
 
         res.setHeader('Content-Type', 'text/csv');
         res.setHeader('Content-Disposition', `attachment; filename=blockvote_voters_${Date.now()}.csv`);
@@ -207,9 +208,8 @@ const exportReport = async (req, res, next) => {
       return res.status(200).json({ success: true, data: voters });
     }
 
-    // Default: system summary as json
-    const totalUsers = await User.count();
-    const totalElections = await Election.count();
+    const totalUsers = await User.countDocuments();
+    const totalElections = await Election.countDocuments();
     res.status(200).json({
       success: true,
       data: {

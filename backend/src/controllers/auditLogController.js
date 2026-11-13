@@ -1,4 +1,3 @@
-const { Op } = require('sequelize');
 const { AuditLog, User } = require('../models');
 
 /**
@@ -22,63 +21,49 @@ const getAuditLogs = async (req, res, next) => {
     const parsedLimit = Math.min(200, Math.max(1, parseInt(limit, 10) || 50));
     const offset = (parsedPage - 1) * parsedLimit;
 
-    const whereClause = {};
+    const query = {};
 
-    if (action) {
-      whereClause.action = action;
-    }
-
-    if (category) {
-      whereClause.category = category;
-    }
-
-    if (status) {
-      whereClause.status = status;
-    }
-
-    if (userId) {
-      whereClause.userId = userId;
-    }
+    if (action) query.action = action;
+    if (category) query.category = category;
+    if (status) query.status = status;
+    if (userId) query.userId = userId;
 
     if (startDate || endDate) {
-      whereClause.createdAt = {};
-      if (startDate) {
-        whereClause.createdAt[Op.gte] = new Date(startDate);
-      }
-      if (endDate) {
-        whereClause.createdAt[Op.lte] = new Date(endDate);
-      }
+      query.createdAt = {};
+      if (startDate) query.createdAt.$gte = new Date(startDate);
+      if (endDate) query.createdAt.$lte = new Date(endDate);
     }
 
     if (search) {
-      whereClause[Op.or] = [
-        { action: { [Op.like]: `%${search}%` } },
-        { performedBy: { [Op.like]: `%${search}%` } },
-        { targetType: { [Op.like]: `%${search}%` } },
-        { targetId: { [Op.like]: `%${search}%` } },
-        { ipAddress: { [Op.like]: `%${search}%` } },
+      const regex = new RegExp(search, 'i');
+      query.$or = [
+        { action: regex },
+        { performedBy: regex },
+        { targetType: regex },
+        { targetId: regex },
+        { ipAddress: regex },
       ];
     }
 
-    const { count, rows: logs } = await AuditLog.findAndCountAll({
-      where: whereClause,
-      include: [
-        {
-          model: User,
-          as: 'user',
-          attributes: ['id', 'name', 'email', 'voterId', 'role'],
-        },
-      ],
-      order: [['createdAt', 'DESC']],
-      limit: parsedLimit,
-      offset,
-    });
+    const count = await AuditLog.countDocuments(query);
+    const rawLogs = await AuditLog.find(query)
+      .sort({ createdAt: -1 })
+      .skip(offset)
+      .limit(parsedLimit);
 
-    // Compute category aggregations for analytics
+    const logs = await Promise.all(
+      rawLogs.map(async (l) => {
+        const u = l.userId ? await User.findById(l.userId).select('id name email voterId role') : null;
+        const lObj = l.toObject();
+        lObj.user = u;
+        return lObj;
+      })
+    );
+
     const totalLogs = count;
-    const authLogsCount = await AuditLog.count({ where: { category: 'AUTH' } });
-    const electionLogsCount = await AuditLog.count({ where: { category: 'ELECTION' } });
-    const securityFailuresCount = await AuditLog.count({ where: { status: 'FAILURE' } });
+    const authLogsCount = await AuditLog.countDocuments({ category: 'AUTH' });
+    const electionLogsCount = await AuditLog.countDocuments({ category: 'ELECTION' });
+    const securityFailuresCount = await AuditLog.countDocuments({ status: 'FAILURE' });
 
     res.status(200).json({
       success: true,
@@ -110,17 +95,19 @@ const exportAuditLogs = async (req, res, next) => {
   try {
     const { format = 'json', limit = 1000 } = req.query;
 
-    const logs = await AuditLog.findAll({
-      include: [
-        {
-          model: User,
-          as: 'user',
-          attributes: ['id', 'name', 'email', 'voterId', 'role'],
-        },
-      ],
-      order: [['createdAt', 'DESC']],
-      limit: Math.min(5000, parseInt(limit, 10) || 1000),
-    });
+    const parsedLimit = Math.min(5000, parseInt(limit, 10) || 1000);
+    const rawLogs = await AuditLog.find({})
+      .sort({ createdAt: -1 })
+      .limit(parsedLimit);
+
+    const logs = await Promise.all(
+      rawLogs.map(async (l) => {
+        const u = l.userId ? await User.findById(l.userId).select('id name email voterId role') : null;
+        const lObj = l.toObject();
+        lObj.user = u;
+        return lObj;
+      })
+    );
 
     if (format === 'csv') {
       const csvHeader = 'ID,Timestamp,Category,Action,Status,PerformedBy,TargetType,TargetId,IPAddress,Details\n';
@@ -128,7 +115,7 @@ const exportAuditLogs = async (req, res, next) => {
         const detailsStr = log.details ? JSON.stringify(log.details).replace(/"/g, '""') : '';
         return [
           log.id,
-          `"${log.createdAt.toISOString()}"`,
+          `"${new Date(log.createdAt).toISOString()}"`,
           `"${log.category}"`,
           `"${log.action}"`,
           `"${log.status}"`,

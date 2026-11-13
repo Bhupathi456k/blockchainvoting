@@ -1,7 +1,6 @@
 const request = require('supertest');
 const app = require('../src/app');
-const { sequelize, User, Election, Candidate, AuditLog, initDatabase } = require('../src/models');
-const config = require('../src/config/config');
+const { mongoose, User, Election, Candidate, AuditLog, initDatabase } = require('../src/models');
 const { seedAccounts } = require('../src/scripts/seedAccounts');
 
 jest.setTimeout(30000);
@@ -12,8 +11,9 @@ describe('Audit Logging & Reporting Subsystem Test Suite', () => {
   let voterId;
 
   beforeAll(async () => {
-    await sequelize.sync({ force: true });
     await initDatabase();
+    await User.deleteMany({});
+    await AuditLog.deleteMany({});
     await seedAccounts();
 
     // Login as Admin
@@ -38,13 +38,11 @@ describe('Audit Logging & Reporting Subsystem Test Suite', () => {
 
   afterAll(async () => {
     await seedAccounts();
-    await sequelize.close();
+    await mongoose.connection.close();
   });
 
   test('TEST A1: Audit log recorded on user login', async () => {
-    const logs = await AuditLog.findAll({
-      where: { action: 'USER_LOGIN' },
-    });
+    const logs = await AuditLog.find({ action: 'USER_LOGIN' });
     expect(logs.length).toBeGreaterThanOrEqual(1);
     expect(logs[0].category).toBe('AUTH');
   });
@@ -121,12 +119,9 @@ describe('Audit Logging & Reporting Subsystem Test Suite', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.isEligible).toBe(false);
 
-    // Verify audit log
     const audit = await AuditLog.findOne({
-      where: {
-        action: 'VOTER_ELIGIBILITY_UPDATED',
-        targetId: String(voterId),
-      },
+      action: 'VOTER_ELIGIBILITY_UPDATED',
+      targetId: String(voterId),
     });
     expect(audit).toBeDefined();
   });

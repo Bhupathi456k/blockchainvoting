@@ -10,9 +10,11 @@
     "seed": "node src/scripts/seedAccounts.js",
     "seed:admin": "node src/scripts/seedAdmin.js",
     "seed:accounts": "node src/scripts/seedAccounts.js",
-    "db:seed": "node src/scripts/seedAccounts.js"
+    "db:seed": "node src/scripts/seedAccounts.js",
+    "db:view": "node src/scripts/viewDatabase.js"
   },
   "dependencies": {
+    "@simplewebauthn/server": "^14.0.1",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
@@ -22,6 +24,7 @@
     "express-validator": "^7.0.2",
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
+    "mongoose": "^9.10.2",
     "morgan": "^1.10.0",
     "sequelize": "^6.37.1",
     "sqlite3": "^5.1.7"

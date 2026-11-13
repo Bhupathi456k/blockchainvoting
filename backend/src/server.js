@@ -21,10 +21,19 @@ const startServer = async () => {
       console.log('---------------------------------');
       console.log(`✅ Server running in ${config.nodeEnv} mode`);
       console.log(`📡 Listening on http://localhost:${config.port}`);
-      console.log(`🔌 Database: SQLite (${config.database.storage})`);
+      console.log(`🔌 Database: MongoDB (${process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/blockchain_voting'})`);
       console.log(`⛓️  Blockchain RPC: ${config.blockchain.rpcUrl}`);
       console.log(`📄 Contract: ${config.blockchain.contractAddress || 'Not set'}`);
       console.log('---------------------------------');
+    });
+
+    server.on('error', (error) => {
+      if (error.code === 'EADDRINUSE') {
+        console.error(`❌ Port ${config.port} is already in use. Please stop the running backend instance or process.`);
+      } else {
+        console.error('❌ Server error:', error);
+      }
+      process.exit(1);
     });
 
     // Graceful shutdown

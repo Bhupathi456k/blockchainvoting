@@ -1,68 +1,37 @@
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/database');
+const mongoose = require('mongoose');
 
-const AuditLog = sequelize.define(
-  'AuditLog',
+const auditLogSchema = new mongoose.Schema(
   {
-    id: {
-      type: DataTypes.INTEGER,
-      primaryKey: true,
-      autoIncrement: true,
-    },
-    action: {
-      type: DataTypes.STRING,
-      allowNull: false,
-    },
-    category: {
-      type: DataTypes.STRING,
-      allowNull: false,
-      defaultValue: 'SYSTEM',
-    },
-    userId: {
-      type: DataTypes.INTEGER,
-      allowNull: true,
-      references: {
-        model: 'users',
-        key: 'id',
-      },
-    },
-    performedBy: {
-      type: DataTypes.STRING,
-      allowNull: false,
-      defaultValue: 'SYSTEM',
-    },
-    targetType: {
-      type: DataTypes.STRING,
-      allowNull: true,
-    },
-    targetId: {
-      type: DataTypes.STRING,
-      allowNull: true,
-    },
-    details: {
-      type: DataTypes.JSON,
-      allowNull: true,
-    },
-    ipAddress: {
-      type: DataTypes.STRING,
-      allowNull: true,
-    },
+    action: { type: String, required: true, index: true },
+    category: { type: String, required: true, default: 'SYSTEM', index: true },
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null, index: true },
+    performedBy: { type: String, required: true, default: 'SYSTEM' },
+    targetType: { type: String, default: null },
+    targetId: { type: String, default: null },
+    details: { type: mongoose.Schema.Types.Mixed, default: null },
+    ipAddress: { type: String, default: null },
     status: {
-      type: DataTypes.ENUM('SUCCESS', 'FAILURE', 'WARNING'),
-      allowNull: false,
-      defaultValue: 'SUCCESS',
+      type: String,
+      enum: ['SUCCESS', 'FAILURE', 'WARNING'],
+      required: true,
+      default: 'SUCCESS',
     },
   },
   {
-    tableName: 'audit_logs',
     timestamps: true,
-    indexes: [
-      { fields: ['action'] },
-      { fields: ['category'] },
-      { fields: ['userId'] },
-      { fields: ['createdAt'] },
-    ],
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
   }
 );
 
+auditLogSchema.virtual('id').get(function () {
+  return this._id.toHexString();
+});
+
+auditLogSchema.statics.findByPk = function (id) {
+  if (!id) return null;
+  return this.findById(id);
+};
+
+const AuditLog = mongoose.model('AuditLog', auditLogSchema);
 module.exports = AuditLog;

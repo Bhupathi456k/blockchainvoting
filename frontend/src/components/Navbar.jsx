@@ -1,17 +1,52 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import {
+  Vote,
+  LogOut,
+  User,
+  Shield,
+  Wallet,
+  CheckCircle2,
+  Menu,
+  X,
+  Search,
+  Command,
+  Bell,
+  Check,
+  ChevronDown,
+} from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { Vote, LogOut, User, Shield, Wallet, CheckCircle, Menu, X } from 'lucide-react';
 
-const Navbar = () => {
+const Navbar = ({ onToggleSidebar, onOpenCommandPalette }) => {
   const { user, logout, isAdmin, walletConnected, walletAddress, connectWallet } = useAuth();
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [userDropdownOpen, setUserDropdownOpen] = useState(false);
+  const [notifDropdownOpen, setNotifDropdownOpen] = useState(false);
+
+  const [notifications, setNotifications] = useState([
+    {
+      id: '1',
+      title: 'Platform Ready',
+      message: 'MongoDB & Hardhat Blockchain fully connected.',
+      time: 'Just now',
+      unread: true,
+    },
+    {
+      id: '2',
+      title: 'WebAuthn Security Enabled',
+      message: 'Direct single-step authentication active.',
+      time: '5m ago',
+      unread: true,
+    },
+  ]);
+
+  const unreadCount = notifications.filter((n) => n.unread).length;
 
   const handleLogout = () => {
     logout();
     navigate('/login');
-    setMobileMenuOpen(false);
+    setUserDropdownOpen(false);
   };
 
   const formatAddress = (addr) => {
@@ -19,234 +54,208 @@ const Navbar = () => {
     return `${addr.substring(0, 6)}...${addr.substring(addr.length - 4)}`;
   };
 
-  const closeMobileMenu = () => {
-    setMobileMenuOpen(false);
+  const markAllRead = () => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, unread: false })));
   };
 
   return (
-    <nav className="bg-slate-900/95 backdrop-blur-sm text-white shadow-lg sticky top-0 z-50 border-b border-slate-800/50">
+    <nav className="bg-slate-900/95 backdrop-blur-md text-white shadow-xl sticky top-0 z-50 border-b border-slate-800/80">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center h-16">
-          {/* Logo & Brand */}
-          <div className="flex items-center">
-            <Link to="/" className="flex items-center space-x-2.5 group" onClick={closeMobileMenu}>
-              <div className="bg-indigo-600/20 p-1.5 rounded-lg border border-indigo-500/30 group-hover:border-indigo-500/50 transition-colors">
-                <Vote className="h-6 w-6 text-indigo-400" />
-              </div>
-              <span className="font-bold text-xl tracking-tight">BlockVote</span>
-            </Link>
-
-            {/* Desktop Navigation Links */}
+        <div className="flex items-center justify-between h-16 gap-4">
+          {/* Left: Brand Logo & Mobile Toggle */}
+          <div className="flex items-center gap-3">
             {user && (
-              <div className="hidden md:flex ml-8 space-x-1">
-                <Link
-                  to="/dashboard"
-                  className="text-slate-300 hover:text-white hover:bg-slate-800/50 px-3 py-2 rounded-lg text-sm font-medium transition-all"
-                >
-                  Dashboard
-                </Link>
-                <Link
-                  to="/elections"
-                  className="text-slate-300 hover:text-white hover:bg-slate-800/50 px-3 py-2 rounded-lg text-sm font-medium transition-all"
-                >
-                  Elections
-                </Link>
-                <Link
-                  to="/results"
-                  className="text-slate-300 hover:text-white hover:bg-slate-800/50 px-3 py-2 rounded-lg text-sm font-medium transition-all"
-                >
-                  Results
-                </Link>
-                <Link
-                  to="/blockchain"
-                  className="text-slate-300 hover:text-white hover:bg-slate-800/50 px-3 py-2 rounded-lg text-sm font-medium transition-all"
-                >
-                  Explorer
-                </Link>
-                {isAdmin && (
-                  <Link
-                    to="/admin"
-                    className="text-indigo-400 hover:text-indigo-300 hover:bg-indigo-950/30 px-3 py-2 rounded-lg text-sm font-medium flex items-center space-x-1.5 transition-all"
-                  >
-                    <Shield className="h-4 w-4" />
-                    <span>Admin</span>
-                  </Link>
-                )}
-              </div>
+              <button
+                onClick={onToggleSidebar}
+                className="lg:hidden text-slate-400 hover:text-white p-2 rounded-xl bg-slate-800/50 border border-slate-700/60"
+                title="Toggle Navigation Menu"
+              >
+                <Menu className="h-5 w-5" />
+              </button>
             )}
+
+            <Link to="/" className="flex items-center space-x-2.5 group">
+              <div className="bg-indigo-600/20 p-2 rounded-xl border border-indigo-500/30 group-hover:border-indigo-500/60 transition-all shadow-inner">
+                <Vote className="h-5 w-5 text-indigo-400" />
+              </div>
+              <span className="font-bold text-lg sm:text-xl tracking-tight bg-gradient-to-r from-white via-slate-100 to-indigo-200 bg-clip-text text-transparent">
+                BlockVote
+              </span>
+            </Link>
           </div>
 
-          {/* Desktop Right Side */}
+          {/* Center: Search & Command Palette Bar (Desktop) */}
+          {user && (
+            <div className="hidden md:flex flex-1 max-w-md mx-4">
+              <button
+                onClick={onOpenCommandPalette}
+                className="w-full bg-slate-950/60 border border-slate-800 hover:border-indigo-500/50 rounded-xl px-3.5 py-1.5 flex items-center justify-between text-xs text-slate-400 transition-all shadow-inner group"
+              >
+                <div className="flex items-center gap-2">
+                  <Search className="w-4 h-4 text-slate-500 group-hover:text-indigo-400" />
+                  <span>Search elections, voters, or commands...</span>
+                </div>
+                <kbd className="hidden sm:inline-flex items-center gap-1 bg-slate-900 border border-slate-800 px-2 py-0.5 rounded text-[10px] font-mono text-slate-400">
+                  <Command className="w-3 h-3" /> K
+                </kbd>
+              </button>
+            </div>
+          )}
+
+          {/* Right: Actions, Notifications & Profile */}
           <div className="hidden md:flex items-center space-x-3">
             {user ? (
               <>
-                {/* Wallet Connection */}
+                {/* Wallet Button */}
                 {walletConnected ? (
-                  <div className="flex items-center space-x-2 bg-slate-800/70 px-3 py-1.5 rounded-lg border border-slate-700 text-xs">
-                    <CheckCircle className="h-3.5 w-3.5 text-green-400" />
-                    <span className="text-slate-300 font-mono">{formatAddress(walletAddress)}</span>
+                  <div className="flex items-center space-x-2 bg-slate-950/80 px-3 py-1.5 rounded-xl border border-emerald-800/60 text-xs">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-400 flex-shrink-0" />
+                    <span className="text-slate-300 font-mono font-medium">{formatAddress(walletAddress)}</span>
                   </div>
                 ) : (
                   <button
                     onClick={connectWallet}
-                    className="flex items-center space-x-1.5 bg-amber-600 hover:bg-amber-500 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-                  >
-                    <Wallet className="h-3.5 w-3.5" />
-                    <span>Connect Wallet</span>
-                  </button>
-                )}
-
-                {/* User Info */}
-                <div className="flex items-center space-x-2 bg-slate-800/50 px-3 py-1.5 rounded-lg border border-slate-700">
-                  <User className="h-4 w-4 text-slate-400" />
-                  <span className="text-sm text-slate-200 max-w-32 truncate">{user.name}</span>
-                  <span className="text-xs bg-indigo-950/70 px-2 py-0.5 rounded text-indigo-400 border border-indigo-800/50">
-                    {user.role}
-                  </span>
-                </div>
-
-                {/* Logout */}
-                <button
-                  onClick={handleLogout}
-                  className="text-slate-400 hover:text-red-400 hover:bg-slate-800/50 p-2 rounded-lg transition-all"
-                  title="Logout"
-                  aria-label="Logout"
-                >
-                  <LogOut className="h-5 w-5" />
-                </button>
-              </>
-            ) : (
-              <div className="flex items-center space-x-3">
-                <Link
-                  to="/login"
-                  className="text-slate-300 hover:text-white hover:bg-slate-800/50 px-4 py-2 rounded-lg text-sm font-medium transition-all"
-                >
-                  Login
-                </Link>
-                <Link
-                  to="/register"
-                  className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg shadow-indigo-900/30 transition-all"
-                >
-                  Register
-                </Link>
-              </div>
-            )}
-          </div>
-
-          {/* Mobile Menu Button */}
-          <button
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="md:hidden text-slate-300 hover:text-white p-2 rounded-lg hover:bg-slate-800/50 transition-all"
-            aria-label="Toggle mobile menu"
-          >
-            {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-          </button>
-        </div>
-      </div>
-
-      {/* Mobile Menu */}
-      {mobileMenuOpen && (
-        <div className="md:hidden border-t border-slate-800 bg-slate-900/98 backdrop-blur-sm">
-          <div className="px-4 py-3 space-y-2">
-            {user ? (
-              <>
-                {/* User Info Mobile */}
-                <div className="flex items-center space-x-2 bg-slate-800/50 px-3 py-2 rounded-lg border border-slate-700 mb-3">
-                  <User className="h-4 w-4 text-slate-400" />
-                  <span className="text-sm text-slate-200 flex-1 truncate">{user.name}</span>
-                  <span className="text-xs bg-indigo-950/70 px-2 py-0.5 rounded text-indigo-400 border border-indigo-800/50">
-                    {user.role}
-                  </span>
-                </div>
-
-                {/* Wallet Mobile */}
-                {walletConnected ? (
-                  <div className="flex items-center space-x-2 bg-slate-800/70 px-3 py-2 rounded-lg border border-slate-700 mb-3">
-                    <CheckCircle className="h-4 w-4 text-green-400" />
-                    <span className="text-xs text-slate-300 font-mono">{formatAddress(walletAddress)}</span>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => {
-                      connectWallet();
-                      closeMobileMenu();
-                    }}
-                    className="w-full flex items-center justify-center space-x-1.5 bg-amber-600 hover:bg-amber-500 text-white px-3 py-2 rounded-lg text-sm font-medium transition-all mb-3"
+                    className="flex items-center space-x-1.5 bg-amber-600 hover:bg-amber-500 text-white px-3 py-1.5 rounded-xl text-xs font-semibold shadow-md shadow-amber-900/30 transition-all"
                   >
                     <Wallet className="h-4 w-4" />
                     <span>Connect Wallet</span>
                   </button>
                 )}
 
-                {/* Navigation Links Mobile */}
-                <Link
-                  to="/dashboard"
-                  onClick={closeMobileMenu}
-                  className="block text-slate-300 hover:text-white hover:bg-slate-800/50 px-3 py-2 rounded-lg text-sm font-medium transition-all"
-                >
-                  Dashboard
-                </Link>
-                <Link
-                  to="/elections"
-                  onClick={closeMobileMenu}
-                  className="block text-slate-300 hover:text-white hover:bg-slate-800/50 px-3 py-2 rounded-lg text-sm font-medium transition-all"
-                >
-                  Elections Discovery
-                </Link>
-                <Link
-                  to="/results"
-                  onClick={closeMobileMenu}
-                  className="block text-slate-300 hover:text-white hover:bg-slate-800/50 px-3 py-2 rounded-lg text-sm font-medium transition-all"
-                >
-                  Results
-                </Link>
-                <Link
-                  to="/blockchain"
-                  onClick={closeMobileMenu}
-                  className="block text-slate-300 hover:text-white hover:bg-slate-800/50 px-3 py-2 rounded-lg text-sm font-medium transition-all"
-                >
-                  Blockchain Explorer
-                </Link>
-                {isAdmin && (
-                  <Link
-                    to="/admin"
-                    onClick={closeMobileMenu}
-                    className="flex items-center space-x-1.5 text-indigo-400 hover:text-indigo-300 hover:bg-indigo-950/30 px-3 py-2 rounded-lg text-sm font-medium transition-all"
+                {/* Notifications Center */}
+                <div className="relative">
+                  <button
+                    onClick={() => {
+                      setNotifDropdownOpen(!notifDropdownOpen);
+                      setUserDropdownOpen(false);
+                    }}
+                    className="relative text-slate-400 hover:text-white p-2 rounded-xl bg-slate-950/60 border border-slate-800 transition-colors"
                   >
-                    <Shield className="h-4 w-4" />
-                    <span>Admin Panel</span>
-                  </Link>
-                )}
+                    <Bell className="w-4 h-4" />
+                    {unreadCount > 0 && (
+                      <span className="absolute -top-1 -right-1 w-4 h-4 bg-indigo-500 text-white font-bold text-[10px] rounded-full flex items-center justify-center animate-pulse">
+                        {unreadCount}
+                      </span>
+                    )}
+                  </button>
 
-                <button
-                  onClick={handleLogout}
-                  className="w-full flex items-center space-x-2 text-red-400 hover:text-red-300 hover:bg-red-950/20 px-3 py-2 rounded-lg text-sm font-medium transition-all mt-2"
-                >
-                  <LogOut className="h-4 w-4" />
-                  <span>Logout</span>
-                </button>
+                  {notifDropdownOpen && (
+                    <div className="absolute right-0 mt-2 w-80 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-4 z-50 space-y-3">
+                      <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                        <span className="text-xs font-bold text-white uppercase tracking-wider">
+                          Notifications
+                        </span>
+                        {unreadCount > 0 && (
+                          <button
+                            onClick={markAllRead}
+                            className="text-[11px] text-indigo-400 hover:text-indigo-300 font-medium"
+                          >
+                            Mark all read
+                          </button>
+                        )}
+                      </div>
+                      <div className="space-y-2 max-h-60 overflow-y-auto">
+                        {notifications.map((n) => (
+                          <div
+                            key={n.id}
+                            className={`p-2.5 rounded-xl border text-xs space-y-1 ${
+                              n.unread
+                                ? 'bg-indigo-950/40 border-indigo-800/60 text-slate-200'
+                                : 'bg-slate-950/40 border-slate-800 text-slate-400'
+                            }`}
+                          >
+                            <div className="flex justify-between font-semibold text-white">
+                              <span>{n.title}</span>
+                              <span className="text-[10px] text-slate-500">{n.time}</span>
+                            </div>
+                            <p className="text-[11px] text-slate-400">{n.message}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* User Dropdown */}
+                <div className="relative">
+                  <button
+                    onClick={() => {
+                      setUserDropdownOpen(!userDropdownOpen);
+                      setNotifDropdownOpen(false);
+                    }}
+                    className="flex items-center space-x-2 bg-slate-950/60 hover:bg-slate-800/80 px-3 py-1.5 rounded-xl border border-slate-800 transition-all text-xs"
+                  >
+                    <User className="h-4 w-4 text-indigo-400" />
+                    <span className="text-slate-200 font-medium max-w-28 truncate">{user.name}</span>
+                    <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+                  </button>
+
+                  {userDropdownOpen && (
+                    <div className="absolute right-0 mt-2 w-56 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-2 z-50 space-y-1 text-xs">
+                      <div className="p-3 border-b border-slate-800">
+                        <div className="font-bold text-white">{user.name}</div>
+                        <div className="text-slate-400 text-[11px] truncate font-mono">{user.email || user.voterId}</div>
+                      </div>
+
+                      <Link
+                        to="/profile"
+                        onClick={() => setUserDropdownOpen(false)}
+                        className="flex items-center space-x-2 px-3 py-2 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800/80 transition-all"
+                      >
+                        <User className="w-4 h-4 text-slate-400" />
+                        <span>My Profile</span>
+                      </Link>
+
+                      <Link
+                        to="/settings/security"
+                        onClick={() => setUserDropdownOpen(false)}
+                        className="flex items-center space-x-2 px-3 py-2 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800/80 transition-all"
+                      >
+                        <Shield className="w-4 h-4 text-slate-400" />
+                        <span>Security & Biometrics</span>
+                      </Link>
+
+                      {isAdmin && (
+                        <Link
+                          to="/admin"
+                          onClick={() => setUserDropdownOpen(false)}
+                          className="flex items-center space-x-2 px-3 py-2 rounded-xl text-indigo-400 hover:bg-indigo-950/40 transition-all font-semibold"
+                        >
+                          <Shield className="w-4 h-4 text-indigo-400" />
+                          <span>Admin Portal</span>
+                        </Link>
+                      )}
+
+                      <button
+                        onClick={handleLogout}
+                        className="w-full flex items-center space-x-2 px-3 py-2 rounded-xl text-red-400 hover:bg-red-950/40 transition-all"
+                      >
+                        <LogOut className="w-4 h-4" />
+                        <span>Sign Out</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
               </>
             ) : (
-              <>
+              <div className="flex items-center space-x-3">
                 <Link
                   to="/login"
-                  onClick={closeMobileMenu}
-                  className="block text-slate-300 hover:text-white hover:bg-slate-800/50 px-3 py-2 rounded-lg text-sm font-medium transition-all"
+                  className="text-slate-300 hover:text-white hover:bg-slate-800/50 px-4 py-2 rounded-xl text-xs font-semibold transition-all"
                 >
-                  Login
+                  Sign In
                 </Link>
                 <Link
                   to="/register"
-                  onClick={closeMobileMenu}
-                  className="block bg-indigo-600 hover:bg-indigo-500 text-white text-center px-3 py-2 rounded-lg text-sm font-medium transition-all"
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl text-xs font-semibold shadow-lg shadow-indigo-900/30 transition-all"
                 >
                   Register
                 </Link>
-              </>
+              </div>
             )}
           </div>
         </div>
-      )}
+      </div>
     </nav>
   );
 };

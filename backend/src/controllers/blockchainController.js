@@ -71,14 +71,16 @@ const verifyTransaction = async (req, res, next) => {
       });
     }
 
-    // Check if we have this transaction in our database
-    const dbTransaction = await BlockchainTransaction.findOne({
-      where: { transactionHash: txHash },
-      include: [
-        { model: Election, as: 'election', attributes: ['id', 'title'] },
-        { model: User, as: 'user', attributes: ['id', 'name', 'voterId'] },
-      ],
-    });
+    const dbTx = await BlockchainTransaction.findOne({ transactionHash: txHash });
+    let dbTransaction = null;
+
+    if (dbTx) {
+      const election = dbTx.electionId ? await Election.findById(dbTx.electionId).select('id title') : null;
+      const user = dbTx.userId ? await User.findById(dbTx.userId).select('id name voterId') : null;
+      dbTransaction = dbTx.toObject();
+      dbTransaction.election = election;
+      dbTransaction.user = user;
+    }
 
     res.status(200).json({
       success: true,
@@ -99,29 +101,38 @@ const getTransactionHistory = async (req, res, next) => {
   try {
     const { limit = 50, offset = 0, type, status, electionId } = req.query;
 
-    const where = {};
-    if (type) where.transactionType = type;
-    if (status) where.status = status;
-    if (electionId) where.electionId = electionId;
+    const query = {};
+    if (type) query.transactionType = type;
+    if (status) query.status = status;
+    if (electionId) query.electionId = electionId;
 
-    const transactions = await BlockchainTransaction.findAndCountAll({
-      where,
-      limit: parseInt(limit),
-      offset: parseInt(offset),
-      order: [['createdAt', 'DESC']],
-      include: [
-        { model: Election, as: 'election', attributes: ['id', 'title'] },
-        { model: User, as: 'user', attributes: ['id', 'name', 'voterId'] },
-      ],
-    });
+    const parsedLimit = parseInt(limit, 10) || 50;
+    const parsedOffset = parseInt(offset, 10) || 0;
+
+    const count = await BlockchainTransaction.countDocuments(query);
+    const rawTxs = await BlockchainTransaction.find(query)
+      .sort({ createdAt: -1 })
+      .skip(parsedOffset)
+      .limit(parsedLimit);
+
+    const transactions = await Promise.all(
+      rawTxs.map(async (t) => {
+        const election = t.electionId ? await Election.findById(t.electionId).select('id title') : null;
+        const user = t.userId ? await User.findById(t.userId).select('id name voterId') : null;
+        const tObj = t.toObject();
+        tObj.election = election;
+        tObj.user = user;
+        return tObj;
+      })
+    );
 
     res.status(200).json({
       success: true,
       data: {
-        transactions: transactions.rows,
-        total: transactions.count,
-        limit: parseInt(limit),
-        offset: parseInt(offset),
+        transactions,
+        total: count,
+        limit: parsedLimit,
+        offset: parsedOffset,
       },
     });
   } catch (error) {
@@ -130,7 +141,7 @@ const getTransactionHistory = async (req, res, next) => {
 };
 
 /**
- * Record a vote transaction (called from voting workflow)
+ * Record a vote transaction
  */
 const recordVoteTransaction = async (req, res, next) => {
   try {
@@ -144,7 +155,6 @@ const recordVoteTransaction = async (req, res, next) => {
       });
     }
 
-    // Verify transaction exists on blockchain
     const txInfo = await blockchainService.verifyTransaction(transactionHash);
     if (!txInfo.exists) {
       return res.status(404).json({
@@ -153,10 +163,7 @@ const recordVoteTransaction = async (req, res, next) => {
       });
     }
 
-    // Check for duplicate transaction
-    const existingTx = await BlockchainTransaction.findOne({
-      where: { transactionHash },
-    });
+    const existingTx = await BlockchainTransaction.findOne({ transactionHash });
 
     if (existingTx) {
       return res.status(409).json({
@@ -165,10 +172,9 @@ const recordVoteTransaction = async (req, res, next) => {
       });
     }
 
-    // Create transaction record
     const transaction = await BlockchainTransaction.create({
       electionId,
-      userId: user.id,
+      userId: user._id || user.id,
       transactionHash,
       blockNumber: txInfo.blockNumber,
       transactionType: 'VOTE',
@@ -177,7 +183,6 @@ const recordVoteTransaction = async (req, res, next) => {
       metadata: { candidateId },
     });
 
-    // Update user voting status
     user.hasVoted = true;
     await user.save();
 

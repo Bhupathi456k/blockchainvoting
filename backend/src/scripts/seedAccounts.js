@@ -2,8 +2,7 @@ const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
 require('dotenv').config({ path: path.resolve(__dirname, '../../../.env') });
 
-const { sequelize, User, ElectionHostRequest, Election, Candidate } = require('../models');
-const config = require('../config/config');
+const { connectDB, User } = require('../models');
 
 /**
  * Seed Accounts Script
@@ -77,53 +76,37 @@ const ACCOUNTS = [
 
 const seedAccounts = async () => {
   try {
-    console.log('🌱 Seeding BlockVote Demo Accounts');
+    console.log('🌱 Seeding BlockVote Demo Accounts into MongoDB');
     console.log('===================================');
 
-    await sequelize.authenticate();
-    console.log('✓ Database connection established');
-
-    await sequelize.sync();
-    console.log('✓ Database schema synchronized');
+    await connectDB();
+    console.log('✓ MongoDB connection established');
 
     for (const acc of ACCOUNTS) {
-      const existing = await User.findOne({
-        where: {
-          [require('sequelize').Op.or]: [
-            { email: acc.email },
-            { voterId: acc.voterId },
-          ],
-        },
-      });
-
       const passwordHash = await User.hashPassword(acc.password);
-
-      if (existing) {
-        // Update credentials and role if needed (idempotent repair)
-        existing.name = acc.name;
-        existing.role = acc.role;
-        existing.hostPermissionStatus = acc.hostPermissionStatus;
-        existing.isEligible = acc.isEligible;
-        existing.passwordHash = passwordHash;
-        await existing.save();
-        console.log(`✓ Updated existing account: ${acc.email} (${acc.role}, status: ${acc.hostPermissionStatus})`);
-      } else {
-        await User.create({
-          voterId: acc.voterId,
-          name: acc.name,
-          email: acc.email,
-          passwordHash: passwordHash,
-          role: acc.role,
-          hostPermissionStatus: acc.hostPermissionStatus,
-          isEligible: acc.isEligible,
-          hasVoted: false,
-        });
-        console.log(`✓ Created new account: ${acc.email} (${acc.role}, status: ${acc.hostPermissionStatus})`);
-      }
+      await User.updateOne(
+        { email: acc.email.toLowerCase() },
+        {
+          $set: {
+            voterId: acc.voterId,
+            name: acc.name,
+            email: acc.email.toLowerCase(),
+            passwordHash: passwordHash,
+            role: acc.role,
+            hostPermissionStatus: acc.hostPermissionStatus,
+            isEligible: acc.isEligible,
+          },
+          $setOnInsert: {
+            hasVoted: false,
+          },
+        },
+        { upsert: true }
+      );
+      console.log(`✓ Seeded account: ${acc.email} (${acc.role}, status: ${acc.hostPermissionStatus})`);
     }
 
     console.log('===================================');
-    console.log('✅ All demo accounts seeded successfully!');
+    console.log('✅ All demo accounts seeded successfully in MongoDB!');
     if (require.main === module) {
       process.exit(0);
     }

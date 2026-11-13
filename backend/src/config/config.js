@@ -51,4 +51,18 @@ module.exports = {
     windowMs: 15 * 60 * 1000, // 15 minutes
     max: 1000, // Generous limit for local development/testing
   },
+
+  // WebAuthn / FIDO2 / Passkey configuration
+  webauthn: {
+    rpName: process.env.WEBAUTHN_RP_NAME || 'BlockVote',
+    rpID: process.env.WEBAUTHN_RP_ID || 'localhost',
+    // Allowed origins — the browser's navigator.credentials check validates against these.
+    // In development, both Vite's default port and a possible CRA port are accepted.
+    expectedOrigins: (process.env.WEBAUTHN_ORIGIN || 'http://localhost:5173,http://localhost:3000')
+      .split(',')
+      .map((o) => o.trim())
+      .filter(Boolean),
+    // Challenge lifetime (ms) — short-lived to prevent replay
+    challengeTTL: parseInt(process.env.WEBAUTHN_CHALLENGE_TTL) || 5 * 60 * 1000, // 5 minutes
+  },
 };

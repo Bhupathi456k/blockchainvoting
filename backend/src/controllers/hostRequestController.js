@@ -18,12 +18,9 @@ const submitHostRequest = async (req, res, next) => {
       additionalInformation,
     } = req.body;
 
-    // Check if user already has an active PENDING request
     const existingPending = await ElectionHostRequest.findOne({
-      where: {
-        userId,
-        status: 'PENDING',
-      },
+      userId,
+      status: 'PENDING',
     });
 
     if (existingPending) {
@@ -33,7 +30,6 @@ const submitHostRequest = async (req, res, next) => {
       });
     }
 
-    // Check date validation
     const start = new Date(proposedStartDate);
     const end = new Date(proposedEndDate);
 
@@ -44,7 +40,6 @@ const submitHostRequest = async (req, res, next) => {
       });
     }
 
-    // Create the request
     const hostRequest = await ElectionHostRequest.create({
       userId,
       electionTitle,
@@ -58,11 +53,7 @@ const submitHostRequest = async (req, res, next) => {
       status: 'PENDING',
     });
 
-    // Update user's hostPermissionStatus to PENDING
-    await User.update(
-      { hostPermissionStatus: 'PENDING' },
-      { where: { id: userId } }
-    );
+    await User.updateOne({ _id: userId }, { hostPermissionStatus: 'PENDING' });
 
     AuditService.logHostRequest('HOST_REQUEST_CREATED', hostRequest, req.user, req);
 
@@ -83,20 +74,14 @@ const getMyHostRequests = async (req, res, next) => {
   try {
     const userId = req.user.id;
 
-    const requests = await ElectionHostRequest.findAll({
-      where: { userId },
-      order: [['createdAt', 'DESC']],
-    });
+    const requests = await ElectionHostRequest.find({ userId }).sort({ createdAt: -1 });
 
-    // Also get current user's status
-    const user = await User.findByPk(userId, {
-      attributes: ['id', 'hostPermissionStatus'],
-    });
+    const user = await User.findById(userId).select('id hostPermissionStatus');
 
     res.status(200).json({
       success: true,
       data: {
-        hostPermissionStatus: user.hostPermissionStatus,
+        hostPermissionStatus: user ? user.hostPermissionStatus : 'NONE',
         requests,
         latestRequest: requests[0] || null,
       },
@@ -112,32 +97,28 @@ const getMyHostRequests = async (req, res, next) => {
 const getAllHostRequests = async (req, res, next) => {
   try {
     const { status } = req.query;
-    const whereClause = {};
+    const query = {};
 
     if (status) {
-      whereClause.status = status;
+      query.status = status;
     }
 
-    const requests = await ElectionHostRequest.findAll({
-      where: whereClause,
-      include: [
-        {
-          model: User,
-          as: 'requester',
-          attributes: ['id', 'name', 'email', 'voterId', 'role', 'hostPermissionStatus'],
-        },
-        {
-          model: User,
-          as: 'reviewer',
-          attributes: ['id', 'name', 'email'],
-        },
-      ],
-      order: [['createdAt', 'DESC']],
-    });
+    const rawRequests = await ElectionHostRequest.find(query).sort({ createdAt: -1 });
 
-    const pendingCount = await ElectionHostRequest.count({ where: { status: 'PENDING' } });
-    const approvedCount = await ElectionHostRequest.count({ where: { status: 'APPROVED' } });
-    const rejectedCount = await ElectionHostRequest.count({ where: { status: 'REJECTED' } });
+    const requests = await Promise.all(
+      rawRequests.map(async (r) => {
+        const requester = await User.findById(r.userId).select('id name email voterId role hostPermissionStatus');
+        const reviewer = r.reviewedBy ? await User.findById(r.reviewedBy).select('id name email') : null;
+        const rObj = r.toObject();
+        rObj.requester = requester;
+        rObj.reviewer = reviewer;
+        return rObj;
+      })
+    );
+
+    const pendingCount = await ElectionHostRequest.countDocuments({ status: 'PENDING' });
+    const approvedCount = await ElectionHostRequest.countDocuments({ status: 'APPROVED' });
+    const rejectedCount = await ElectionHostRequest.countDocuments({ status: 'REJECTED' });
 
     res.status(200).json({
       success: true,
@@ -157,26 +138,13 @@ const getAllHostRequests = async (req, res, next) => {
 };
 
 /**
- * Get single host request by ID (Admin or Requester)
+ * Get single host request by ID
  */
 const getHostRequestById = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    const hostRequest = await ElectionHostRequest.findByPk(id, {
-      include: [
-        {
-          model: User,
-          as: 'requester',
-          attributes: ['id', 'name', 'email', 'voterId', 'role', 'hostPermissionStatus'],
-        },
-        {
-          model: User,
-          as: 'reviewer',
-          attributes: ['id', 'name', 'email'],
-        },
-      ],
-    });
+    const hostRequest = await ElectionHostRequest.findById(id);
 
     if (!hostRequest) {
       return res.status(404).json({
@@ -185,17 +153,23 @@ const getHostRequestById = async (req, res, next) => {
       });
     }
 
-    // Access control: only admin or the user who created the request can view it
-    if (req.user.role !== 'ADMIN' && hostRequest.userId !== req.user.id) {
+    if (req.user.role !== 'ADMIN' && String(hostRequest.userId) !== String(req.user.id)) {
       return res.status(403).json({
         success: false,
         error: 'You do not have permission to view this request',
       });
     }
 
+    const requester = await User.findById(hostRequest.userId).select('id name email voterId role hostPermissionStatus');
+    const reviewer = hostRequest.reviewedBy ? await User.findById(hostRequest.reviewedBy).select('id name email') : null;
+
+    const reqObj = hostRequest.toObject();
+    reqObj.requester = requester;
+    reqObj.reviewer = reviewer;
+
     res.status(200).json({
       success: true,
-      data: hostRequest,
+      data: reqObj,
     });
   } catch (error) {
     next(error);
@@ -210,7 +184,7 @@ const approveHostRequest = async (req, res, next) => {
     const { id } = req.params;
     const adminId = req.user.id;
 
-    const hostRequest = await ElectionHostRequest.findByPk(id);
+    const hostRequest = await ElectionHostRequest.findById(id);
 
     if (!hostRequest) {
       return res.status(404).json({
@@ -226,7 +200,7 @@ const approveHostRequest = async (req, res, next) => {
       });
     }
 
-    const requester = await User.findByPk(hostRequest.userId);
+    const requester = await User.findById(hostRequest.userId);
     if (!requester) {
       return res.status(404).json({
         success: false,
@@ -234,13 +208,11 @@ const approveHostRequest = async (req, res, next) => {
       });
     }
 
-    // Update request
     hostRequest.status = 'APPROVED';
     hostRequest.reviewedBy = adminId;
     hostRequest.reviewedAt = new Date();
     await hostRequest.save();
 
-    // Update requester's host permission status
     requester.hostPermissionStatus = 'APPROVED';
     await requester.save();
 
@@ -273,7 +245,7 @@ const rejectHostRequest = async (req, res, next) => {
     const { adminReason } = req.body;
     const adminId = req.user.id;
 
-    const hostRequest = await ElectionHostRequest.findByPk(id);
+    const hostRequest = await ElectionHostRequest.findById(id);
 
     if (!hostRequest) {
       return res.status(404).json({
@@ -289,7 +261,7 @@ const rejectHostRequest = async (req, res, next) => {
       });
     }
 
-    const requester = await User.findByPk(hostRequest.userId);
+    const requester = await User.findById(hostRequest.userId);
     if (!requester) {
       return res.status(404).json({
         success: false,
@@ -297,14 +269,12 @@ const rejectHostRequest = async (req, res, next) => {
       });
     }
 
-    // Update request
     hostRequest.status = 'REJECTED';
     hostRequest.adminReason = adminReason || 'The request does not meet the necessary criteria for hosting an election.';
     hostRequest.reviewedBy = adminId;
     hostRequest.reviewedAt = new Date();
     await hostRequest.save();
 
-    // Update requester's host permission status
     requester.hostPermissionStatus = 'REJECTED';
     await requester.save();
 

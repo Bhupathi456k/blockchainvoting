@@ -35,6 +35,14 @@ router.post(
       .withMessage('End time is required')
       .isISO8601()
       .withMessage('Invalid end time format'),
+    body('visibility')
+      .optional()
+      .isIn(['PUBLIC', 'PRIVATE'])
+      .withMessage('Visibility must be PUBLIC or PRIVATE'),
+    body('status')
+      .optional()
+      .isIn(['DRAFT', 'UPCOMING', 'ACTIVE', 'ENDED', 'CANCELLED'])
+      .withMessage('Invalid status'),
   ],
   validate,
   electionController.createElection
@@ -84,6 +92,14 @@ router.patch(
     body('endTime')
       .optional()
       .isISO8601(),
+    body('visibility')
+      .optional()
+      .isIn(['PUBLIC', 'PRIVATE'])
+      .withMessage('Visibility must be PUBLIC or PRIVATE'),
+    body('status')
+      .optional()
+      .isIn(['DRAFT', 'UPCOMING', 'ACTIVE', 'ENDED', 'CANCELLED'])
+      .withMessage('Invalid status'),
   ],
   validate,
   electionController.updateElection

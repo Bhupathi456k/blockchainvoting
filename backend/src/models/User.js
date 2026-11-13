@@ -1,81 +1,51 @@
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/database');
+const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
-const User = sequelize.define('User', {
-  id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    autoIncrement: true,
-  },
-  voterId: {
-    type: DataTypes.STRING(50),
-    unique: true,
-    allowNull: false,
-  },
-  name: {
-    type: DataTypes.STRING(200),
-    allowNull: false,
-  },
-  email: {
-    type: DataTypes.STRING(200),
-    unique: true,
-    allowNull: false,
-    validate: {
-      isEmail: true,
+const userSchema = new mongoose.Schema(
+  {
+    voterId: { type: String, required: true, unique: true, index: true },
+    name: { type: String, required: true },
+    email: { type: String, required: true, unique: true, index: true, lowercase: true, trim: true },
+    phone: { type: String, default: null },
+    passwordHash: { type: String, required: true },
+    role: { type: String, enum: ['VOTER', 'ADMIN'], default: 'VOTER', required: true },
+    hostPermissionStatus: {
+      type: String,
+      enum: ['NONE', 'PENDING', 'APPROVED', 'REJECTED'],
+      default: 'NONE',
+      required: true,
     },
+    walletAddress: { type: String, default: null, index: true },
+    isEligible: { type: Boolean, default: true },
+    hasVoted: { type: Boolean, default: false },
+    faceData: { type: String, default: null },
+    isFaceVerified: { type: Boolean, default: false },
+    fingerprintData: { type: String, default: null },
+    isFingerprintVerified: { type: Boolean, default: false },
   },
-  phone: {
-    type: DataTypes.STRING(20),
-    allowNull: true,
-  },
-  passwordHash: {
-    type: DataTypes.STRING(255),
-    allowNull: false,
-  },
-  role: {
-    type: DataTypes.ENUM('VOTER', 'ADMIN'),
-    defaultValue: 'VOTER',
-    allowNull: false,
-  },
-  hostPermissionStatus: {
-    type: DataTypes.ENUM('NONE', 'PENDING', 'APPROVED', 'REJECTED'),
-    defaultValue: 'NONE',
-    allowNull: false,
-  },
-  walletAddress: {
-    type: DataTypes.STRING(42),
-    allowNull: true,
-    validate: {
-      is: /^0x[a-fA-F0-9]{40}$/i,
-    },
-  },
-  isEligible: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: true,
-  },
-  hasVoted: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: false,
-  },
-}, {
-  tableName: 'users',
-  timestamps: true,
-  indexes: [
-    { fields: ['email'] },
-    { fields: ['voterId'] },
-    { fields: ['walletAddress'] },
-  ],
+  {
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
+  }
+);
+
+userSchema.virtual('id').get(function () {
+  return this._id.toHexString();
 });
 
-// Instance method to compare passwords
-User.prototype.comparePassword = async function(candidatePassword) {
+userSchema.methods.comparePassword = async function (candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.passwordHash);
 };
 
-// Static method to hash password
-User.hashPassword = async function(password) {
+userSchema.statics.hashPassword = async function (password) {
   return await bcrypt.hash(password, 10);
 };
 
+userSchema.statics.findByPk = function (id) {
+  if (!id) return null;
+  return this.findById(id);
+};
+
+const User = mongoose.model('User', userSchema);
 module.exports = User;

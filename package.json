@@ -25,5 +25,8 @@
     "smart-contracts"
   ],
   "author": "",
-  "license": "ISC"
+  "license": "ISC",
+  "dependencies": {
+    "omniroute": "^3.8.50"
+  }
 }

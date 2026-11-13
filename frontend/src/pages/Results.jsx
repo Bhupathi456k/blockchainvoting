@@ -16,7 +16,8 @@ const Results = () => {
   const fetchElections = async () => {
     try {
       const response = await electionsAPI.getAll();
-      const allElections = response.data.data;
+      const rawData = response.data?.data;
+      const allElections = Array.isArray(rawData) ? rawData : (rawData?.elections || []);
       const activeOrEnded = allElections.filter(e => e.status === 'ACTIVE' || e.status === 'ENDED');
       setElections(activeOrEnded);
 

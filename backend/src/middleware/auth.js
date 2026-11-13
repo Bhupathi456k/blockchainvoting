@@ -37,6 +37,15 @@ const authenticate = async (req, res, next) => {
       });
     }
 
+    // Reject temporary pre-auth tokens on full-access routes
+    if (decoded.type === 'pre-auth') {
+      return res.status(401).json({
+        success: false,
+        error: 'Biometric verification is required. Please complete biometric authentication.',
+        code: 'BIOMETRIC_REQUIRED',
+      });
+    }
+
     // Get user from database
     const user = await User.findByPk(decoded.userId, {
       attributes: { exclude: ['passwordHash'] },
@@ -158,7 +167,9 @@ const requireElectionOwner = async (req, res, next) => {
     }
 
     // Check ownership
-    if (election.hostUserId !== req.user.id) {
+    const hostIdStr = String(election.hostUserId || '');
+    const userIdStr = String(req.user.id || req.user._id || '');
+    if (hostIdStr !== userIdStr) {
       return res.status(403).json({
         success: false,
         error: 'You do not have permission to modify this election',
@@ -208,8 +219,65 @@ const optionalAuth = async (req, res, next) => {
   }
 };
 
+/**
+ * Authentication middleware that accepts BOTH full tokens and temporary pre-auth tokens.
+ * Used exclusively for WebAuthn setup/registration endpoints during initial login.
+ */
+const authenticatePreAuth = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({
+        success: false,
+        error: 'No token provided. Please authenticate.',
+      });
+    }
+
+    const token = authHeader.substring(7);
+
+    let decoded;
+    try {
+      decoded = jwt.verify(token, config.jwt.secret);
+    } catch (err) {
+      if (err.name === 'TokenExpiredError') {
+        return res.status(401).json({
+          success: false,
+          error: 'Session has expired. Please log in again.',
+        });
+      }
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid session token. Please log in again.',
+      });
+    }
+
+    const user = await User.findByPk(decoded.userId, {
+      attributes: { exclude: ['passwordHash'] },
+    });
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        error: 'User not found.',
+      });
+    }
+
+    req.user = user;
+    req.isPreAuth = decoded.type === 'pre-auth';
+    next();
+  } catch (error) {
+    console.error('Pre-auth authentication error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Authentication failed',
+    });
+  }
+};
+
 module.exports = {
   authenticate,
+  authenticatePreAuth,
   authorize,
   optionalAuth,
   requireApprovedElectionHost,

@@ -1,557 +1,498 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { useNavigate } from 'react-router-dom';
-import { electionsAPI, candidatesAPI, blockchainAPI, hostRequestsAPI } from '../services/api';
+import { electionsAPI, candidatesAPI, hostRequestsAPI, votersAPI } from '../services/api';
 import web3Service from '../services/web3';
-import { Vote, Wallet, CheckCircle, AlertCircle, Clock, Plus, Shield, Send, AlertTriangle, Play, Square, UserCheck } from 'lucide-react';
-import { Card } from '../components/ui/Card';
-import { Button } from '../components/ui/Button';
+import AttentionCenter from '../components/AttentionCenter';
+import OnboardingChecklist from '../components/OnboardingChecklist';
+import BlockchainIntegrityCard from '../components/BlockchainIntegrityCard';
+import ElectionCountdown from '../components/ElectionCountdown';
+import Card from '../components/ui/Card';
+import Button from '../components/ui/Button';
+import Input from '../components/ui/Input';
+import { CardSkeleton } from '../components/ui/LoadingSkeleton';
+import EmptyState from '../components/ui/EmptyState';
+import {
+  Vote,
+  Wallet,
+  Shield,
+  Clock,
+  PlusCircle,
+  Sparkles,
+  CheckCircle2,
+  AlertCircle,
+  Users,
+  Activity,
+  ArrowRight,
+  TrendingUp,
+  Cpu,
+  Search,
+  ChevronRight,
+  Calendar,
+} from 'lucide-react';
 
 const Dashboard = () => {
-  const { user, walletConnected, walletAddress, connectWallet, refreshUser } = useAuth();
-  const [activeElection, setActiveElection] = useState(null);
-  const [candidates, setCandidates] = useState([]);
-  const [myHostedElections, setMyHostedElections] = useState([]);
-  const [hostRequestData, setHostRequestData] = useState(null);
-  const [selectedCandidate, setSelectedCandidate] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [voting, setVoting] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-  const [txHash, setTxHash] = useState('');
+  const { user, walletConnected, walletAddress, connectWallet, canHostElections, isAdmin } = useAuth();
   const navigate = useNavigate();
 
+  const [activeElection, setActiveElection] = useState(null);
+  const [electionsList, setElectionsList] = useState([]);
+  const [myHostedElections, setMyHostedElections] = useState([]);
+  const [candidates, setCandidates] = useState([]);
+  const [voterStats, setVoterStats] = useState(null);
+  const [hostRequestsCount, setHostRequestsCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [dashboardSearch, setDashboardSearch] = useState('');
+
   useEffect(() => {
-    loadDashboardData();
+    fetchDashboardData();
   }, []);
 
-  const loadDashboardData = async () => {
+  const fetchDashboardData = async () => {
     try {
       setLoading(true);
+
       // Fetch active election
       try {
         const activeRes = await electionsAPI.getActive();
-        const active = activeRes.data.data;
+        const active = activeRes.data?.data;
         if (active) {
           setActiveElection(active);
-          const candResponse = await candidatesAPI.getByElection(active.id);
-          setCandidates(candResponse.data.data);
+          const candRes = await candidatesAPI.getByElection(active.id);
+          setCandidates(candRes.data?.data || []);
+        } else {
+          setActiveElection(null);
         }
-      } catch (err) {
-        console.warn('No active election');
+      } catch (e) {
+        console.log('No active election currently');
       }
 
-      // Fetch user's host request status & history
+      // Fetch all discoverable elections
       try {
-        const hostReqRes = await hostRequestsAPI.getMyRequests();
-        setHostRequestData(hostReqRes.data.data);
-      } catch (err) {
-        console.warn('Could not load host requests');
+        const allRes = await electionsAPI.getAll({ limit: 50 });
+        const rawElections = allRes.data?.data;
+        const list = Array.isArray(rawElections)
+          ? rawElections
+          : (rawElections?.elections || []);
+        setElectionsList(list);
+
+        if (user) {
+          setMyHostedElections(list.filter((e) => e.hostUserId === user.id));
+        }
+      } catch (e) {
+        console.warn('Could not load elections');
       }
 
-      // Fetch all elections to filter ones hosted by this user
-      try {
-        const allElectionsRes = await electionsAPI.getAll();
-        const all = allElectionsRes.data.data;
-        if (user && all) {
-          const mine = all.filter((e) => e.hostUserId === user.id);
-          setMyHostedElections(mine);
+      // Fetch admin / host metrics if admin
+      if (isAdmin) {
+        try {
+          const reqsRes = await hostRequestsAPI.getAll({ status: 'PENDING' });
+          const rawReqs = reqsRes.data?.data;
+          const reqCount = Array.isArray(rawReqs)
+            ? rawReqs.length
+            : (rawReqs?.requests?.length || rawReqs?.stats?.pending || 0);
+          setHostRequestsCount(reqCount);
+          const statsRes = await votersAPI.getStats();
+          setVoterStats(statsRes.data?.data);
+        } catch (e) {
+          // Non-fatal
         }
-      } catch (err) {
-        console.warn('Could not load elections list');
       }
     } catch (err) {
-      console.error('Failed to load dashboard data:', err);
+      console.error('Failed to load dashboard:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleVote = async () => {
-    if (!selectedCandidate) {
-      return setError('Please select a candidate');
-    }
-
-    if (!walletConnected) {
-      return setError('Please connect your MetaMask wallet first');
-    }
-
-    if (user.hasVoted) {
-      return setError('You have already voted');
-    }
-
-    setError('');
-    setSuccess('');
-    setVoting(true);
-
-    try {
-      // Initialize contract
-      const contractAddress = import.meta.env.VITE_CONTRACT_ADDRESS;
-      if (!contractAddress) {
-        throw new Error('Contract address not configured');
-      }
-
-      web3Service.initContract(contractAddress);
-
-      // Check authorization
-      const isAuthorized = await web3Service.isAuthorized(walletAddress);
-      if (!isAuthorized) {
-        throw new Error('Your wallet is not authorized to vote. Please contact administrator.');
-      }
-
-      // Check if already voted on blockchain
-      const hasVoted = await web3Service.hasVoted(walletAddress);
-      if (hasVoted) {
-        throw new Error('You have already cast your vote on the blockchain');
-      }
-
-      // Cast vote on blockchain
-      const result = await web3Service.castVote(selectedCandidate.blockchainCandidateId || selectedCandidate.id);
-
-      setTxHash(result.transactionHash);
-
-      // Record transaction in backend
-      await blockchainAPI.recordVote({
-        electionId: activeElection.id,
-        transactionHash: result.transactionHash,
-        candidateId: selectedCandidate.id,
-      });
-
-      setSuccess('Vote cast successfully! Your vote has been recorded on the blockchain.');
-      await refreshUser();
-
-      setTimeout(() => {
-        navigate('/results');
-      }, 3000);
-    } catch (err) {
-      console.error('Voting error:', err);
-      setError(err.message || 'Failed to cast vote. Please try again.');
-    } finally {
-      setVoting(false);
+  const handleDashboardSearch = (e) => {
+    e.preventDefault();
+    if (dashboardSearch.trim()) {
+      navigate(`/elections?q=${encodeURIComponent(dashboardSearch.trim())}`);
+    } else {
+      navigate('/elections');
     }
   };
 
-  const handleStartElection = async (electionId) => {
-    try {
-      await electionsAPI.start(electionId);
-      setSuccess('Election started successfully!');
-      loadDashboardData();
-    } catch (err) {
-      setError(err.response?.data?.error || 'Failed to start election');
-    }
-  };
+  const activeElections = electionsList.filter((e) => e.status === 'ACTIVE');
+  const upcomingElections = electionsList.filter((e) => e.status === 'UPCOMING');
+  const recentlyEndedElections = electionsList.filter((e) => e.status === 'ENDED');
 
-  const handleEndElection = async (electionId) => {
-    try {
-      await electionsAPI.end(electionId);
-      setSuccess('Election ended successfully!');
-      loadDashboardData();
-    } catch (err) {
-      setError(err.response?.data?.error || 'Failed to end election');
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
-      </div>
-    );
-  }
-
-  const hostStatus = user?.hostPermissionStatus || hostRequestData?.hostPermissionStatus || 'NONE';
-  const latestRequest = hostRequestData?.latestRequest;
+  const activeCount = activeElections.length;
+  const upcomingCount = upcomingElections.length;
+  const endedCount = recentlyEndedElections.length;
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8 space-y-8">
-      {/* User Welcome & Info Header */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-white mb-1">Welcome, {user?.name}</h1>
-          <p className="text-gray-400 text-sm">
-            Unified Voting & Election Dashboard • Voter ID: <span className="text-indigo-400 font-mono">{user?.voterId}</span>
+    <div className="space-y-8">
+      {/* Personalized Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-slate-900 via-indigo-950/40 to-slate-900 p-6 sm:p-8 rounded-3xl border border-slate-800 shadow-2xl">
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="px-3 py-1 rounded-full text-xs font-semibold bg-indigo-500/10 border border-indigo-500/30 text-indigo-300">
+              {isAdmin ? 'System Administrator Portal' : canHostElections ? 'Approved Election Host' : 'Verified Voter'}
+            </span>
+            {walletConnected && (
+              <span className="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 flex items-center gap-1">
+                <CheckCircle2 className="w-3 h-3" /> Web3 Connected
+              </span>
+            )}
+          </div>
+          <h1 className="text-2xl sm:text-4xl font-extrabold text-white tracking-tight">
+            Welcome back, {user?.name || 'Voter'}
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-400 max-w-2xl leading-relaxed">
+            Stay informed about elections, securely cast your encrypted ballot on the smart contract, and verify tamper-proof results.
           </p>
         </div>
-        <div className="flex items-center space-x-2">
-          {user?.role === 'ADMIN' ? (
-            <span className="bg-purple-950 text-purple-300 border border-purple-800 px-3 py-1 rounded-full text-xs font-semibold">
-              ADMINISTRATOR
-            </span>
+
+        <div className="flex flex-wrap items-center gap-3">
+          {canHostElections ? (
+            <Button onClick={() => navigate('/elections/create')} className="shadow-indigo-900/40">
+              <PlusCircle className="w-4 h-4 mr-1.5" />
+              <span>Create Election</span>
+            </Button>
           ) : (
-            <span className="bg-slate-800 text-gray-300 border border-slate-700 px-3 py-1 rounded-full text-xs font-semibold">
-              VOTER
-            </span>
-          )}
-          {hostStatus === 'APPROVED' && (
-            <span className="bg-green-950 text-green-400 border border-green-800 px-3 py-1 rounded-full text-xs font-semibold flex items-center space-x-1">
-              <CheckCircle className="h-3 w-3" />
-              <span>APPROVED HOST</span>
-            </span>
+            <Button onClick={() => navigate('/elections')} variant="outline">
+              <Vote className="w-4 h-4 mr-1.5" />
+              <span>Explore Elections</span>
+            </Button>
           )}
         </div>
       </div>
 
-      {/* Global Alerts */}
-      {error && (
-        <div className="bg-red-950/50 border border-red-500/50 rounded-xl p-4 flex items-start space-x-3">
-          <AlertCircle className="h-5 w-5 text-red-400 flex-shrink-0 mt-0.5" />
-          <p className="text-red-300">{error}</p>
-        </div>
-      )}
-
-      {success && (
-        <div className="bg-green-950/50 border border-green-500/50 rounded-xl p-4">
-          <div className="flex items-start space-x-3 mb-2">
-            <CheckCircle className="h-5 w-5 text-green-400 flex-shrink-0 mt-0.5" />
-            <p className="text-green-300 font-medium">{success}</p>
+      {/* Find an Election / Global Dashboard Search Bar */}
+      <Card className="p-4 sm:p-5 border-slate-800 bg-slate-900/90 shadow-xl">
+        <form onSubmit={handleDashboardSearch} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+          <div className="relative flex-1">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <Input
+              id="dashboard-search-input"
+              type="text"
+              placeholder="Find an Election by title, department, or keyword..."
+              value={dashboardSearch}
+              onChange={(e) => setDashboardSearch(e.target.value)}
+              className="pl-10 bg-slate-950/80 border-slate-700 text-sm w-full"
+            />
           </div>
-          {txHash && (
-            <div className="ml-8 bg-slate-900/50 p-3 rounded-lg">
-              <p className="text-xs text-gray-400 mb-1">Transaction Hash:</p>
-              <code className="text-xs text-green-400 font-mono break-all">{txHash}</code>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* SECTION 1: VOTING DASHBOARD                                               */}
-      {/* ========================================================================= */}
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-bold text-white flex items-center space-x-2">
-            <Vote className="h-6 w-6 text-indigo-400" />
-            <span>Your Voting Dashboard</span>
-          </h2>
-          <Button
-            onClick={() => navigate('/results')}
-            className="bg-slate-800 hover:bg-slate-700 text-xs px-3 py-1.5"
-          >
-            View Election Results
-          </Button>
-        </div>
-
-        {/* Wallet Connection Banner */}
-        {!walletConnected && (
-          <div className="bg-amber-950/50 border border-amber-500/50 rounded-xl p-4 flex items-start justify-between gap-4">
-            <div className="flex items-start space-x-3">
-              <Wallet className="h-5 w-5 text-amber-400 flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="text-amber-300 font-medium">Connect Your Web3 Wallet to Vote</p>
-                <p className="text-amber-400/80 text-sm mt-0.5">
-                  MetaMask is required to cast tamper-proof cryptographic ballots on the Ethereum blockchain.
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={connectWallet}
-              className="bg-amber-600 hover:bg-amber-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition flex-shrink-0"
+          <div className="flex items-center gap-2">
+            <Button type="submit" className="bg-indigo-600 hover:bg-indigo-500 text-xs flex items-center justify-center gap-1.5 px-4">
+              <Search className="w-3.5 h-3.5" />
+              <span>Search</span>
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => navigate('/elections')}
+              className="border-slate-700 hover:bg-slate-800 text-xs whitespace-nowrap"
             >
-              Connect MetaMask
-            </button>
+              View All Elections
+            </Button>
           </div>
-        )}
+        </form>
+      </Card>
 
-        {/* Voting Status if voted */}
-        {user?.hasVoted && (
-          <div className="bg-green-950/50 border border-green-500/50 rounded-xl p-4 flex items-start space-x-3">
-            <CheckCircle className="h-5 w-5 text-green-400 flex-shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <p className="text-green-300 font-medium">You have cast your ballot.</p>
-              <p className="text-green-400/70 text-sm mt-1">
-                Your vote is permanently and immutably recorded on the smart contract.
-              </p>
+      {/* Attention Center Action Alerts */}
+      <AttentionCenter activeElection={activeElection} pendingHostRequestsCount={hostRequestsCount} />
+
+      {/* Onboarding Checklist for Users & Hosts */}
+      <OnboardingChecklist activeElection={activeElection} />
+
+      {/* KPI Overview Metrics */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card
+          onClick={() => navigate('/elections?status=ACTIVE')}
+          className="p-5 border-slate-800 bg-slate-900/80 space-y-2 cursor-pointer hover:border-emerald-500/40 transition"
+        >
+          <div className="flex items-center justify-between text-slate-400">
+            <span className="text-xs font-semibold uppercase tracking-wider">Active Elections</span>
+            <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+              <Vote className="w-4 h-4" />
             </div>
           </div>
-        )}
+          <div className="text-2xl sm:text-3xl font-bold text-white">{activeCount}</div>
+          <div className="text-xs text-slate-500">Live polls currently accepting votes</div>
+        </Card>
 
-        {/* Active Election Card */}
-        {activeElection ? (
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
-              <div>
-                <div className="flex items-center space-x-3 mb-1">
-                  <h3 className="text-2xl font-bold text-white">{activeElection.title}</h3>
-                  <span className="bg-green-950 text-green-400 border border-green-800 text-xs px-2.5 py-0.5 rounded-full font-medium">
-                    ACTIVE NOW
-                  </span>
-                </div>
-                <p className="text-gray-400">{activeElection.description}</p>
-              </div>
-              <div className="text-sm text-gray-400 flex items-center space-x-1.5">
-                <Clock className="h-4 w-4 text-indigo-400" />
-                <span>Ends: {new Date(activeElection.endTime).toLocaleString()}</span>
-              </div>
+        <Card
+          onClick={() => navigate('/elections?status=UPCOMING')}
+          className="p-5 border-slate-800 bg-slate-900/80 space-y-2 cursor-pointer hover:border-amber-500/40 transition"
+        >
+          <div className="flex items-center justify-between text-slate-400">
+            <span className="text-xs font-semibold uppercase tracking-wider">Upcoming Elections</span>
+            <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+              <Clock className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="text-2xl sm:text-3xl font-bold text-white">{upcomingCount}</div>
+          <div className="text-xs text-slate-500">Scheduled to launch soon</div>
+        </Card>
+
+        <Card className="p-5 border-slate-800 bg-slate-900/80 space-y-2">
+          <div className="flex items-center justify-between text-slate-400">
+            <span className="text-xs font-semibold uppercase tracking-wider">My Vote Status</span>
+            <div className={`p-2 rounded-xl border ${user?.hasVoted ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-slate-800 text-slate-400 border-slate-700'}`}>
+              <CheckCircle2 className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="text-xl sm:text-2xl font-bold text-white truncate">
+            {user?.hasVoted ? 'Vote Recorded' : 'Ballot Ready'}
+          </div>
+          <div className="text-xs text-slate-500">
+            {user?.hasVoted ? 'Confirmed on Ethereum contract' : 'No active vote cast yet'}
+          </div>
+        </Card>
+
+        <Card className="p-5 border-slate-800 bg-slate-900/80 space-y-2">
+          <div className="flex items-center justify-between text-slate-400">
+            <span className="text-xs font-semibold uppercase tracking-wider">Host Status</span>
+            <div className="p-2 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20">
+              <Sparkles className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="text-xl sm:text-2xl font-bold text-white uppercase tracking-wider">
+            {user?.hostPermissionStatus || 'NONE'}
+          </div>
+          <div className="text-xs text-slate-500">
+            {canHostElections ? 'Authorized to publish elections' : 'Request host permission in settings'}
+          </div>
+        </Card>
+      </div>
+
+      {/* Main Grid: Live Election Command Center & Discoverable Elections */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Left 2 Cols: Live Center + Upcoming Discoverable Elections */}
+        <div className="lg:col-span-2 space-y-8">
+          {/* Featured / Active Election */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg sm:text-xl font-bold text-white tracking-tight flex items-center gap-2">
+                <Vote className="w-5 h-5 text-indigo-400" />
+                <span>Live Election Command Center</span>
+              </h2>
+              <Link to="/elections" className="text-xs text-indigo-400 hover:text-indigo-300 font-medium flex items-center gap-1">
+                View All <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
             </div>
 
-            {/* Candidates */}
-            <h4 className="text-sm font-semibold text-gray-400 mb-3 uppercase tracking-wider">
-              Select a Candidate to Cast Vote
-            </h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-              {candidates.map((candidate) => (
-                <div
-                  key={candidate.id}
-                  onClick={() => !user?.hasVoted && setSelectedCandidate(candidate)}
-                  className={`
-                    bg-slate-800/60 border rounded-xl p-5 cursor-pointer transition-all
-                    ${selectedCandidate?.id === candidate.id
-                      ? 'border-indigo-500 ring-2 ring-indigo-500/50 bg-indigo-950/20'
-                      : 'border-slate-700 hover:border-slate-600'
-                    }
-                    ${user?.hasVoted ? 'opacity-60 cursor-not-allowed' : ''}
-                  `}
-                >
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="flex-1">
-                      <h4 className="text-lg font-bold text-white">{candidate.name}</h4>
-                      <p className="text-xs text-indigo-400 font-medium">{candidate.party}</p>
+            {loading ? (
+              <CardSkeleton />
+            ) : activeElection ? (
+              <Card className="p-6 sm:p-8 border-indigo-900/60 bg-gradient-to-br from-slate-900 via-indigo-950/20 to-slate-900 shadow-2xl relative overflow-hidden space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800/80 pb-5">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-950/80 text-emerald-400 border border-emerald-800">
+                        POLLING ACTIVE
+                      </span>
+                      <span className="text-xs text-slate-400">{activeElection.organization || 'Public Election'}</span>
                     </div>
-                    {selectedCandidate?.id === candidate.id && (
-                      <CheckCircle className="h-5 w-5 text-indigo-400 flex-shrink-0" />
-                    )}
+                    <h3 className="text-xl sm:text-2xl font-bold text-white tracking-tight">{activeElection.title}</h3>
                   </div>
-                  <p className="text-xs text-gray-400 line-clamp-3">{candidate.description}</p>
-                </div>
-              ))}
-            </div>
 
-            {/* Cast Vote Action Button */}
-            {!user?.hasVoted && (
-              <button
-                onClick={handleVote}
-                disabled={!selectedCandidate || !walletConnected || voting}
-                className="w-full py-3.5 px-6 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl shadow-lg transition duration-150 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
-              >
-                {voting ? (
-                  <>
-                    <span className="inline-block animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></span>
-                    <span>Signing Transaction on Blockchain...</span>
-                  </>
-                ) : (
-                  <>
-                    <Vote className="h-5 w-5" />
-                    <span>Cast Your Vote</span>
-                  </>
-                )}
-              </button>
+                  <ElectionCountdown
+                    startTime={activeElection.startTime}
+                    endTime={activeElection.endTime}
+                    status={activeElection.status}
+                  />
+                </div>
+
+                <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                  {activeElection.description || 'Cast your ballot securely. Votes are recorded immutably on the Ethereum smart contract.'}
+                </p>
+
+                {/* Candidate Quick Stats */}
+                <div className="p-4 bg-slate-950/60 rounded-2xl border border-slate-800 flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2 text-slate-300 font-medium">
+                    <Users className="w-4 h-4 text-indigo-400" />
+                    <span>Candidates contesting:</span>
+                    <span className="font-bold text-white">{candidates.length}</span>
+                  </div>
+                  <div className="text-emerald-400 font-mono font-semibold">
+                    Smart Contract Validated ✓
+                  </div>
+                </div>
+
+                {/* Voting Action CTA */}
+                <div className="pt-2 flex flex-col sm:flex-row gap-3">
+                  <Button
+                    size="lg"
+                    onClick={() => navigate(`/elections/${activeElection.id}`)}
+                    className="flex-1 bg-indigo-600 hover:bg-indigo-500 shadow-indigo-900/40 text-white font-semibold flex items-center justify-center gap-2"
+                  >
+                    <Vote className="w-4 h-4" />
+                    <span>{user?.hasVoted ? 'View Election Tally' : 'Cast Encrypted Vote'}</span>
+                  </Button>
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    onClick={() => navigate('/results')}
+                    className="flex-1 border-slate-700 hover:bg-slate-800 text-slate-200 flex items-center justify-center gap-2"
+                  >
+                    <Activity className="w-4 h-4 text-emerald-400" />
+                    <span>View Live Results</span>
+                  </Button>
+                </div>
+              </Card>
+            ) : (
+              <EmptyState
+                icon={Vote}
+                title="No Active Elections Right Now"
+                description="There are currently no active polls accepting votes. Explore upcoming scheduled elections below."
+                actionLabel="Explore Scheduled Elections"
+                onAction={() => navigate('/elections')}
+              />
             )}
           </div>
-        ) : (
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center">
-            <Clock className="mx-auto h-12 w-12 text-gray-500 mb-3" />
-            <h3 className="text-xl font-bold text-white mb-1">No Active Election Available</h3>
-            <p className="text-gray-400 text-sm">
-              There are currently no elections accepting votes. When an election starts, it will appear here.
-            </p>
-          </div>
-        )}
-      </div>
 
-      {/* ========================================================================= */}
-      {/* SECTION 2: ELECTION HOSTING (DYNAMIC STATES)                              */}
-      {/* ========================================================================= */}
-      <div className="space-y-6 pt-4 border-t border-slate-800">
-        <h2 className="text-2xl font-bold text-white flex items-center space-x-2">
-          <Shield className="h-6 w-6 text-indigo-400" />
-          <span>Election Hosting Authorization</span>
-        </h2>
-
-        {/* STATE 1: NONE (NORMAL USER) */}
-        {hostStatus === 'NONE' && (
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8">
-            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-              <div>
-                <h3 className="text-xl font-bold text-white mb-2">
-                  Want to Host and Manage Your Own Election?
-                </h3>
-                <p className="text-gray-400 text-sm max-w-2xl mb-2">
-                  You are currently not authorized to host elections. Normal voter accounts require administrator
-                  authorization before gaining access to election creation and candidate configuration.
-                </p>
-                <p className="text-xs text-gray-500">
-                  Submit a hosting request with your proposed election details. Once approved by an admin, you can create and publish elections.
-                </p>
-              </div>
-              <Button
-                onClick={() => navigate('/host-request')}
-                className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-3 rounded-xl flex-shrink-0 flex items-center space-x-2 font-medium"
-              >
-                <Send className="h-4 w-4" />
-                <span>Request Permission to Host</span>
-              </Button>
+          {/* Upcoming Elections Discovery Feed */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base sm:text-lg font-bold text-white tracking-tight flex items-center gap-2">
+                <Clock className="w-4 h-4 text-amber-400" />
+                <span>Upcoming Scheduled Elections ({upcomingCount})</span>
+              </h3>
+              <Link to="/elections?status=UPCOMING" className="text-xs text-indigo-400 hover:text-indigo-300 font-medium">
+                Browse All Upcoming →
+              </Link>
             </div>
-          </div>
-        )}
 
-        {/* STATE 2: PENDING USER */}
-        {hostStatus === 'PENDING' && (
-          <div className="bg-amber-950/30 border border-amber-500/40 rounded-2xl p-6 md:p-8">
-            <div className="flex items-start space-x-4">
-              <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex-shrink-0">
-                <Clock className="h-8 w-8 text-amber-400" />
-              </div>
-              <div className="flex-1">
-                <div className="flex items-center space-x-3 mb-2">
-                  <h3 className="text-xl font-bold text-white">Election Hosting Request Under Review</h3>
-                  <span className="bg-amber-900/60 text-amber-300 border border-amber-700 text-xs px-3 py-1 rounded-full font-semibold animate-pulse">
-                    ⏳ PENDING ADMIN REVIEW
-                  </span>
-                </div>
-                <p className="text-amber-200/80 text-sm mb-4">
-                  Your request to become an election host has been submitted and is currently being evaluated by a platform administrator.
-                  You will be able to create and host elections immediately after approval.
-                </p>
-
-                {latestRequest && (
-                  <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 mt-3 grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-                    <div>
-                      <span className="text-gray-500 block">Proposed Election</span>
-                      <span className="text-white font-medium">{latestRequest.electionTitle}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-500 block">Expected Voters</span>
-                      <span className="text-white font-medium">{latestRequest.expectedVoters} voters</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-500 block">Submitted At</span>
-                      <span className="text-white font-medium">
-                        {new Date(latestRequest.createdAt).toLocaleDateString()}
+            {upcomingElections.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {upcomingElections.slice(0, 4).map((elec) => (
+                  <Card key={elec.id} className="p-5 border-slate-800 bg-slate-900/70 space-y-3 hover:border-indigo-500/40 transition">
+                    <div className="flex justify-between items-start">
+                      <h4 className="text-sm font-bold text-white line-clamp-1">{elec.title}</h4>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-amber-950 text-amber-300 border border-amber-800">
+                        UPCOMING
                       </span>
                     </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* STATE 3: APPROVED USER */}
-        {hostStatus === 'APPROVED' && (
-          <div className="space-y-6">
-            <div className="bg-green-950/30 border border-green-500/40 rounded-2xl p-6 md:p-8">
-              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                <div className="flex items-start space-x-4">
-                  <div className="p-3 bg-green-500/10 border border-green-500/30 rounded-xl flex-shrink-0">
-                    <UserCheck className="h-8 w-8 text-green-400" />
-                  </div>
-                  <div>
-                    <div className="flex items-center space-x-3 mb-1">
-                      <h3 className="text-xl font-bold text-white">Hosting Permission Approved</h3>
-                      <span className="bg-green-900/60 text-green-300 border border-green-700 text-xs px-3 py-0.5 rounded-full font-semibold">
-                        ✓ APPROVED
-                      </span>
-                    </div>
-                    <p className="text-green-200/80 text-sm">
-                      You are authorized to create, configure candidates, and host elections on BlockVote.
+                    <p className="text-xs text-slate-400 line-clamp-2">
+                      {elec.description || 'Decentralized cryptographic election.'}
                     </p>
-                  </div>
-                </div>
-                <Button
-                  onClick={() => navigate('/elections/create')}
-                  className="bg-green-600 hover:bg-green-500 text-white px-5 py-3 rounded-xl flex-shrink-0 flex items-center space-x-2 font-bold shadow-lg"
-                >
-                  <Plus className="h-5 w-5" />
-                  <span>+ Create & Host Election</span>
-                </Button>
-              </div>
-            </div>
-
-            {/* My Hosted Elections List */}
-            {myHostedElections.length > 0 && (
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-                <h3 className="text-xl font-bold text-white mb-4">Elections Hosted by You</h3>
-                <div className="space-y-4">
-                  {myHostedElections.map((el) => (
-                    <div
-                      key={el.id}
-                      className="bg-slate-800/60 border border-slate-700 rounded-xl p-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4"
-                    >
-                      <div>
-                        <div className="flex items-center space-x-3 mb-1">
-                          <h4 className="text-lg font-bold text-white">{el.title}</h4>
-                          <span
-                            className={`text-xs px-2.5 py-0.5 rounded-full font-semibold ${
-                              el.status === 'ACTIVE'
-                                ? 'bg-green-950 text-green-400 border border-green-800'
-                                : el.status === 'ENDED'
-                                ? 'bg-gray-800 text-gray-400 border border-gray-700'
-                                : 'bg-yellow-950 text-yellow-400 border border-yellow-800'
-                            }`}
-                          >
-                            {el.status}
-                          </span>
-                        </div>
-                        <p className="text-xs text-gray-400 mb-2">{el.description}</p>
-                        <p className="text-xs text-gray-500">
-                          {new Date(el.startTime).toLocaleDateString()} - {new Date(el.endTime).toLocaleDateString()}
-                        </p>
-                      </div>
-
-                      <div className="flex items-center space-x-2">
-                        {el.status === 'DRAFT' && (
-                          <button
-                            onClick={() => handleStartElection(el.id)}
-                            className="bg-green-600 hover:bg-green-500 text-white text-xs px-3 py-1.5 rounded-lg flex items-center space-x-1"
-                          >
-                            <Play className="h-3 w-3" />
-                            <span>Start Election</span>
-                          </button>
-                        )}
-                        {el.status === 'ACTIVE' && (
-                          <button
-                            onClick={() => handleEndElection(el.id)}
-                            className="bg-red-600 hover:bg-red-500 text-white text-xs px-3 py-1.5 rounded-lg flex items-center space-x-1"
-                          >
-                            <Square className="h-3 w-3" />
-                            <span>End Election</span>
-                          </button>
-                        )}
-                      </div>
+                    <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
+                      <span className="flex items-center gap-1">
+                        <Calendar className="w-3.5 h-3.5 text-slate-500" />
+                        Starts: {new Date(elec.startTime).toLocaleDateString()}
+                      </span>
+                      <span className="text-indigo-300 font-medium">
+                        {elec.candidates?.length || 0} Candidates
+                      </span>
                     </div>
+                    <Button size="sm" variant="outline" onClick={() => navigate(`/elections/${elec.id}`)} className="w-full text-xs mt-2 border-indigo-500/30 text-indigo-300">
+                      View Details
+                    </Button>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <div className="p-6 rounded-2xl bg-slate-900/40 border border-slate-800 text-xs text-slate-400 text-center">
+                No scheduled elections pending launch at this time.
+              </div>
+            )}
+          </div>
+
+          {/* Hosted Elections Preview (For Approved Hosts) */}
+          {canHostElections && (
+            <div className="space-y-4 pt-2">
+              <div className="flex items-center justify-between">
+                <h3 className="text-base sm:text-lg font-bold text-white tracking-tight">
+                  My Hosted Elections ({myHostedElections.length})
+                </h3>
+                <Link to="/host/elections" className="text-xs text-indigo-400 hover:text-indigo-300 font-medium">
+                  Manage All →
+                </Link>
+              </div>
+
+              {myHostedElections.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {myHostedElections.slice(0, 2).map((elec) => (
+                    <Card key={elec.id} className="p-5 border-slate-800 bg-slate-900/70 space-y-3">
+                      <div className="flex justify-between items-start">
+                        <h4 className="text-sm font-bold text-white truncate">{elec.title}</h4>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-indigo-950 text-indigo-300 border border-indigo-800">
+                          {elec.status}
+                        </span>
+                      </div>
+                      <div className="text-xs text-slate-400 flex items-center gap-2">
+                        <Clock className="w-3.5 h-3.5 text-slate-500" />
+                        <span>{new Date(elec.startTime).toLocaleDateString()}</span>
+                      </div>
+                      <Button size="sm" variant="outline" onClick={() => navigate(`/elections/${elec.id}`)} className="w-full text-xs">
+                        Manage Election Details
+                      </Button>
+                    </Card>
                   ))}
                 </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* STATE 4: REJECTED USER */}
-        {hostStatus === 'REJECTED' && (
-          <div className="bg-red-950/30 border border-red-500/40 rounded-2xl p-6 md:p-8">
-            <div className="flex items-start space-x-4">
-              <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl flex-shrink-0">
-                <AlertTriangle className="h-8 w-8 text-red-400" />
-              </div>
-              <div className="flex-1">
-                <div className="flex items-center space-x-3 mb-2">
-                  <h3 className="text-xl font-bold text-white">Hosting Request Not Approved</h3>
-                  <span className="bg-red-900/60 text-red-300 border border-red-700 text-xs px-3 py-0.5 rounded-full font-semibold">
-                    ✕ REJECTED
-                  </span>
+              ) : (
+                <div className="p-4 rounded-xl bg-slate-900/50 border border-slate-800 text-xs text-slate-400 flex items-center justify-between">
+                  <span>You have not created any elections yet.</span>
+                  <Button size="sm" onClick={() => navigate('/elections/create')}>
+                    Create First Election
+                  </Button>
                 </div>
-                <p className="text-red-200/80 text-sm mb-3">
-                  Your previous request to host an election was reviewed and not approved by the administrator.
-                </p>
-
-                {latestRequest?.adminReason && (
-                  <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 mb-4">
-                    <p className="text-xs text-gray-400 mb-1 font-semibold">Administrator Reason:</p>
-                    <p className="text-sm text-red-300 italic">"{latestRequest.adminReason}"</p>
-                  </div>
-                )}
-
-                <Button
-                  onClick={() => navigate('/host-request')}
-                  className="bg-red-600 hover:bg-red-500 text-white text-sm px-4 py-2 rounded-xl flex items-center space-x-2"
-                >
-                  <Send className="h-4 w-4" />
-                  <span>Submit New Hosting Request</span>
-                </Button>
-              </div>
+              )}
             </div>
-          </div>
-        )}
+          )}
+        </div>
+
+        {/* Right Col: Blockchain Integrity & Security Center */}
+        <div className="space-y-6">
+          <BlockchainIntegrityCard />
+
+          {/* Quick Actions Shortcuts */}
+          <Card className="p-6 border-slate-800 bg-slate-900/90 shadow-xl space-y-4">
+            <h3 className="text-sm font-bold text-white tracking-tight uppercase tracking-wider text-slate-400">
+              Quick Shortcuts
+            </h3>
+            <div className="space-y-2">
+              <button
+                onClick={() => navigate('/elections')}
+                className="w-full p-3 rounded-xl bg-slate-950/60 border border-slate-800 hover:border-indigo-500/50 text-left flex items-center justify-between text-xs sm:text-sm text-slate-200 hover:text-white transition-all group"
+              >
+                <div className="flex items-center gap-3">
+                  <Vote className="w-4 h-4 text-indigo-400" />
+                  <span>Discover All Elections</span>
+                </div>
+                <ArrowRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-white" />
+              </button>
+
+              <button
+                onClick={() => navigate('/activity')}
+                className="w-full p-3 rounded-xl bg-slate-950/60 border border-slate-800 hover:border-indigo-500/50 text-left flex items-center justify-between text-xs sm:text-sm text-slate-200 hover:text-white transition-all group"
+              >
+                <div className="flex items-center gap-3">
+                  <Activity className="w-4 h-4 text-emerald-400" />
+                  <span>My Voting Activity Ledger</span>
+                </div>
+                <ArrowRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-white" />
+              </button>
+
+              <button
+                onClick={() => navigate('/settings/security')}
+                className="w-full p-3 rounded-xl bg-slate-950/60 border border-slate-800 hover:border-indigo-500/50 text-left flex items-center justify-between text-xs sm:text-sm text-slate-200 hover:text-white transition-all group"
+              >
+                <div className="flex items-center gap-3">
+                  <Shield className="w-4 h-4 text-indigo-400" />
+                  <span>Security & WebAuthn Setup</span>
+                </div>
+                <ArrowRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-white" />
+              </button>
+
+              {!canHostElections && (
+                <button
+                  onClick={() => navigate('/host-request')}
+                  className="w-full p-3 rounded-xl bg-slate-950/60 border border-slate-800 hover:border-indigo-500/50 text-left flex items-center justify-between text-xs sm:text-sm text-slate-200 hover:text-white transition-all group"
+                >
+                  <div className="flex items-center gap-3">
+                    <Sparkles className="w-4 h-4 text-amber-400" />
+                    <span>Request Host Authorization</span>
+                  </div>
+                  <ArrowRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-white" />
+                </button>
+              )}
+            </div>
+          </Card>
+        </div>
       </div>
     </div>
   );

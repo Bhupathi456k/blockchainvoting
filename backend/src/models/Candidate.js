@@ -1,51 +1,30 @@
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/database');
+const mongoose = require('mongoose');
 
-const Candidate = sequelize.define('Candidate', {
-  id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    autoIncrement: true,
+const candidateSchema = new mongoose.Schema(
+  {
+    electionId: { type: mongoose.Schema.Types.ObjectId, ref: 'Election', required: true, index: true },
+    name: { type: String, required: true },
+    party: { type: String, default: null },
+    description: { type: String, default: null },
+    imageUrl: { type: String, default: null },
+    blockchainCandidateId: { type: Number, default: null, index: true },
+    isDeployedToBlockchain: { type: Boolean, default: false },
   },
-  electionId: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    references: {
-      model: 'elections',
-      key: 'id',
-    },
-  },
-  name: {
-    type: DataTypes.STRING(200),
-    allowNull: false,
-  },
-  party: {
-    type: DataTypes.STRING(200),
-    allowNull: true,
-  },
-  description: {
-    type: DataTypes.TEXT,
-    allowNull: true,
-  },
-  imageUrl: {
-    type: DataTypes.STRING(500),
-    allowNull: true,
-  },
-  blockchainCandidateId: {
-    type: DataTypes.INTEGER,
-    allowNull: true,
-  },
-  isDeployedToBlockchain: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: false,
-  },
-}, {
-  tableName: 'candidates',
-  timestamps: true,
-  indexes: [
-    { fields: ['electionId'] },
-    { fields: ['blockchainCandidateId'] },
-  ],
+  {
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
+  }
+);
+
+candidateSchema.virtual('id').get(function () {
+  return this._id.toHexString();
 });
 
+candidateSchema.statics.findByPk = function (id) {
+  if (!id) return null;
+  return this.findById(id);
+};
+
+const Candidate = mongoose.model('Candidate', candidateSchema);
 module.exports = Candidate;

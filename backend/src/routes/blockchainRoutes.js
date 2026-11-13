@@ -1,7 +1,7 @@
 const express = require('express');
 const { body } = require('express-validator');
 const blockchainController = require('../controllers/blockchainController');
-const { authenticate, authorize } = require('../middleware/auth');
+const { authenticate, authorize, optionalAuth } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 
 const router = express.Router();
@@ -9,16 +9,16 @@ const router = express.Router();
 /**
  * @route   GET /api/blockchain/status
  * @desc    Get blockchain connection status
- * @access  Private
+ * @access  Public / Optional Auth
  */
-router.get('/status', authenticate, blockchainController.getBlockchainStatus);
+router.get('/status', optionalAuth, blockchainController.getBlockchainStatus);
 
 /**
  * @route   GET /api/blockchain/contract
  * @desc    Get smart contract information
- * @access  Private
+ * @access  Public / Optional Auth
  */
-router.get('/contract', authenticate, blockchainController.getContractInfo);
+router.get('/contract', optionalAuth, blockchainController.getContractInfo);
 
 /**
  * @route   GET /api/blockchain/transactions/:txHash

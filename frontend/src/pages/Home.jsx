@@ -62,15 +62,20 @@ const Home = () => {
           </p>
 
           {/* CTA Buttons */}
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 max-w-md mx-auto">
-            <Link to="/register" className="w-full sm:w-auto">
-              <Button size="lg" className="w-full sm:w-auto shadow-indigo-900/40" rightIcon={ArrowRight}>
-                Register to Vote
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 max-w-xl mx-auto">
+            <Link to="/login" className="w-full sm:w-auto">
+              <Button size="lg" className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-500 shadow-indigo-900/40 text-white font-semibold" rightIcon={ArrowRight}>
+                Enter Dashboard
               </Button>
             </Link>
-            <Link to="/login" className="w-full sm:w-auto">
-              <Button variant="secondary" size="lg" className="w-full sm:w-auto">
-                Sign In
+            <Link to="/elections" className="w-full sm:w-auto">
+              <Button variant="outline" size="lg" className="w-full sm:w-auto border-slate-700 hover:bg-slate-800 text-slate-200">
+                Explore Elections
+              </Button>
+            </Link>
+            <Link to="/register" className="w-full sm:w-auto">
+              <Button variant="ghost" size="lg" className="w-full sm:w-auto text-slate-400 hover:text-white">
+                Register as Voter
               </Button>
             </Link>
           </div>
